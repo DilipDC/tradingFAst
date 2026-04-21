@@ -11,7 +11,7 @@ body {
   overflow-x: hidden;
 }
 
-/* Loading */
+/* Loading Screen */
 .loading-screen {
   position: fixed;
   top: 0;
@@ -33,7 +33,9 @@ body {
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 
 #app {
   min-height: 100vh;
@@ -47,6 +49,10 @@ body {
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.3s ease;
+}
+.glass-card:hover {
+  border-color: rgba(0, 255, 136, 0.3);
+  box-shadow: 0 8px 25px rgba(0, 255, 136, 0.1);
 }
 
 /* Buttons */
@@ -63,6 +69,14 @@ body {
   background: linear-gradient(135deg, #00ff88, #00cc6a);
   color: #0a0a0a;
 }
+.btn-primary:active {
+  transform: scale(0.96);
+}
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
 .btn-up {
   background: linear-gradient(135deg, #00ff88, #00aa55);
   color: #0a0a0a;
@@ -72,7 +86,7 @@ body {
   color: #fff;
 }
 
-/* Bottom Navigation (exactly like image) */
+/* Bottom Navigation */
 .bottom-nav {
   position: fixed;
   bottom: 0;
@@ -95,8 +109,12 @@ body {
   cursor: pointer;
   font-size: 12px;
 }
-.nav-item i { font-size: 22px; }
-.nav-item.active { color: #00ff88; }
+.nav-item i {
+  font-size: 22px;
+}
+.nav-item.active {
+  color: #00ff88;
+}
 
 /* Pages */
 .page {
@@ -104,13 +122,15 @@ body {
   animation: fadeIn 0.3s ease;
   padding: 20px;
 }
-.page.active { display: block; }
+.page.active {
+  display: block;
+}
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ----------------- TERMINAL (matches image perfectly) ----------------- */
+/* Terminal Page */
 .asset-header {
   text-align: center;
   margin-bottom: 20px;
@@ -135,23 +155,14 @@ body {
   padding: 15px;
   margin: 20px 0;
 }
-/* Custom chart styling to look like the image's 0-100% scale */
-.chart-scale {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: #888;
-  margin-top: 5px;
-  padding: 0 10px;
-}
 .timer-display {
   text-align: center;
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
   font-family: monospace;
   background: #1a1a2a;
-  padding: 8px;
-  border-radius: 40px;
+  padding: 10px;
+  border-radius: 50px;
   margin: 15px 0;
 }
 .amount-buttons, .time-buttons {
@@ -166,7 +177,7 @@ body {
   padding: 10px 20px;
   border-radius: 30px;
   cursor: pointer;
-  font-weight: 500;
+  transition: all 0.2s;
 }
 .amount-btn.active, .time-btn.active {
   background: #00ff88;
@@ -184,12 +195,6 @@ body {
   font-size: 18px;
   font-weight: 700;
 }
-.profit-badge {
-  text-align: center;
-  margin-top: 15px;
-  font-size: 14px;
-  color: #00ff88;
-}
 
 /* Trade History Card */
 .trade-card {
@@ -199,18 +204,21 @@ body {
   margin-bottom: 12px;
   border-left: 4px solid #444;
 }
-.trade-card.win { border-left-color: #00ff88; }
-.trade-card.loss { border-left-color: #ff3355; }
-.trade-card.pending { border-left-color: #ffaa00; }
-
-/* Market Page (Forex, Trading Conditions) */
-.market-section {
-  margin-bottom: 25px;
+.trade-card.win {
+  border-left-color: #00ff88;
 }
-.market-section h3 {
-  margin-bottom: 10px;
-  font-size: 18px;
-  color: #00ff88;
+.trade-card.loss {
+  border-left-color: #ff3355;
+}
+.trade-card.pending {
+  border-left-color: #ffaa00;
+}
+
+/* Market Page */
+.asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 .asset-item {
   background: #111118;
@@ -219,17 +227,32 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
   cursor: pointer;
+  transition: all 0.2s;
 }
-.asset-current-price { color: #00ff88; font-weight: bold; }
+.asset-item:hover {
+  background: #1a1a28;
+  transform: translateX(5px);
+}
+.asset-info h4 {
+  font-size: 16px;
+}
+.asset-info p {
+  font-size: 12px;
+  color: #888;
+}
+.asset-current-price {
+  font-weight: 700;
+  color: #00ff88;
+}
 
-/* Rewards Page */
+/* Rewards & Help Cards */
 .reward-card, .help-card {
   background: #111118;
   border-radius: 20px;
   padding: 20px;
   margin-bottom: 15px;
+  border: 1px solid rgba(0, 255, 136, 0.2);
 }
 .promo-code {
   background: #0a0a0a;
@@ -238,6 +261,13 @@ body {
   text-align: center;
   font-family: monospace;
   margin-top: 10px;
+}
+.help-card {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.help-card:hover {
+  background: #1a1a28;
 }
 
 /* Profile Page */
@@ -270,13 +300,20 @@ body {
   padding: 15px;
   text-align: center;
 }
-.stat-value { font-size: 24px; font-weight: 700; color: #00ff88; }
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #00ff88;
+}
 
-/* Modals & Toast */
+/* Modals */
 .modal-overlay {
   position: fixed;
-  top:0; left:0; right:0; bottom:0;
-  background: rgba(0,0,0,0.8);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(5px);
   display: flex;
   align-items: center;
@@ -289,16 +326,26 @@ body {
   padding: 24px;
   width: 90%;
   max-width: 400px;
+  border: 1px solid rgba(0, 255, 136, 0.3);
 }
-input {
+
+/* Forms */
+input, select, textarea {
   background: #0a0a0a;
   border: 1px solid #2a2a3a;
   border-radius: 12px;
-  padding: 12px;
+  padding: 12px 16px;
   color: white;
+  font-family: inherit;
   width: 100%;
   margin-bottom: 15px;
 }
+input:focus {
+  outline: none;
+  border-color: #00ff88;
+}
+
+/* Toast */
 .toast {
   position: fixed;
   bottom: 80px;
@@ -306,7 +353,7 @@ input {
   right: 20px;
   background: #1a1a2a;
   border-left: 4px solid #00ff88;
-  padding: 14px;
+  padding: 14px 20px;
   border-radius: 12px;
   z-index: 200;
   animation: slideUp 0.3s ease;
@@ -314,4 +361,14 @@ input {
 @keyframes slideUp {
   from { transform: translateY(100px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .asset-price {
+    font-size: 32px;
+  }
+  .btn {
+    padding: 10px 20px;
+  }
 }
