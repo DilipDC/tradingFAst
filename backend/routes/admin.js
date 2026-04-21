@@ -6,6 +6,7 @@ const TradeModel = require('../models/tradeModel');
 const AssetModel = require('../models/assetModel');
 const TransactionModel = require('../models/transactionModel');
 const { db } = require('../models/db');
+const bcrypt = require('bcryptjs');
 
 // Admin middleware - check if user is admin (username 'admin')
 router.use(authMiddleware);
@@ -23,6 +24,67 @@ router.get('/users', async (req, res) => {
   try {
     const users = await UserModel.getAllUsers();
     res.json({ users });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get user trade stats
+router.get('/users/:id/stats', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const stats = await new Promise((resolve, reject) => {
+      db.get(`
+        SELECT 
+          COUNT(*) as totalTrades,
+          SUM(CASE WHEN result = 'win' THEN 1 ELSE 0 END) as wins,
+          SUM(CASE WHEN result = 'loss' THEN 1 ELSE 0 END) as losses,
+          COALESCE(SUM(profit), 0) as totalProfit
+        FROM trades WHERE user_id = ? AND status = 'closed'
+      `, [userId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row || { totalTrades: 0, wins: 0, losses: 0, totalProfit: 0 });
+      });
+    });
+    res.json(stats);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update user (username, password, balance)
+router.put('/users/:id', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { username, password, balance } = req.body;
+    if (username) {
+      await db.run('UPDATE users SET username = ? WHERE id = ?', [username, userId]);
+    }
+    if (password) {
+      const hashed = bcrypt.hashSync(password, 10);
+      await db.run('UPDATE users SET password = ? WHERE id = ?', [hashed, userId]);
+    }
+    if (balance !== undefined) {
+      await db.run('UPDATE users SET balance = ? WHERE id = ?', [balance, userId]);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete user and all related data
+router.delete('/users/:id', async (req, res) => {
+  try {
+    const userId = req.params.id;
+    await db.run('DELETE FROM trades WHERE user_id = ?', [userId]);
+    await db.run('DELETE FROM deposits WHERE user_id = ?', [userId]);
+    await db.run('DELETE FROM withdrawals WHERE user_id = ?', [userId]);
+    await db.run('DELETE FROM users WHERE id = ?', [userId]);
+    res.json({ success: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -61,7 +123,6 @@ router.post('/deposits/:id/approve', async (req, res) => {
     if (!deposit || deposit.status !== 'pending') {
       return res.status(400).json({ error: 'Invalid deposit' });
     }
-    // Update deposit with proof and status
     await db.run(
       'UPDATE deposits SET status = "approved", approved_at = CURRENT_TIMESTAMP, proof_text = ? WHERE id = ?',
       [proof_text || '', depositId]
@@ -106,7 +167,6 @@ router.post('/withdrawals/:id/approve', async (req, res) => {
     if (!withdrawal || withdrawal.status !== 'pending') {
       return res.status(400).json({ error: 'Invalid withdrawal' });
     }
-    // Deduct balance
     const deducted = await UserModel.deductBalance(withdrawal.user_id, withdrawal.amount);
     if (deducted === 0) {
       return res.status(400).json({ error: 'Insufficient balance' });
