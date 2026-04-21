@@ -1,35 +1,16 @@
-// Optimized Admin Panel with User Management
+// Complete Admin Panel with forced preloader removal
 const API_URL = window.location.origin + '/api';
+
+// Force remove preloader after 1.5 seconds (prevents infinite loading)
+setTimeout(() => {
+  const preloader = document.querySelector('.preloader');
+  if (preloader) preloader.style.display = 'none';
+}, 1500);
+
 let adminToken = localStorage.getItem('adminToken');
 let currentSection = 'dashboard';
 
-// Remove preloader after DOM ready
-document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => {
-    const preloader = document.querySelector('.preloader');
-    if (preloader) {
-      preloader.style.opacity = '0';
-      setTimeout(() => preloader.remove(), 300);
-    }
-  }, 800);
-  
-  if (adminToken) {
-    verifyTokenAndStart();
-  } else {
-    showLoginForm();
-  }
-});
-
-async function verifyTokenAndStart() {
-  try {
-    await fetchWithAuth(`${API_URL}/admin/settings`);
-    initAdminPanel();
-  } catch (err) {
-    localStorage.removeItem('adminToken');
-    showLoginForm('Session expired');
-  }
-}
-
+// Helper for authenticated fetch
 async function fetchWithAuth(url, options = {}) {
   const res = await fetch(url, {
     ...options,
@@ -42,6 +23,7 @@ async function fetchWithAuth(url, options = {}) {
   return res;
 }
 
+// Show login form
 function showLoginForm(errorMsg = '') {
   const root = document.getElementById('admin-root');
   root.innerHTML = `
@@ -79,6 +61,7 @@ function showLoginForm(errorMsg = '') {
   };
 }
 
+// Initialize full admin panel
 async function initAdminPanel() {
   const root = document.getElementById('admin-root');
   root.innerHTML = `
@@ -99,7 +82,7 @@ async function initAdminPanel() {
         <div class="top-bar">
           <div class="admin-info"><span><i class="fas fa-crown"></i> Admin</span><button class="logout-btn" id="logout-btn"><i class="fas fa-sign-out-alt"></i> Exit</button></div>
         </div>
-        <div id="section-content">Loading...</div>
+        <div id="section-content">Loading dashboard...</div>
       </main>
     </div>
   `;
@@ -175,7 +158,7 @@ async function loadDashboard(container) {
   } catch(err) { container.innerHTML = '<div class="error-msg">Error loading dashboard</div>'; }
 }
 
-// ========== USERS (Full Management) ==========
+// ========== USERS (with edit/delete/stats) ==========
 async function loadUsers(container) {
   try {
     const res = await fetchWithAuth(`${API_URL}/admin/users`);
@@ -201,10 +184,7 @@ async function loadUsers(container) {
       </div>
     `;
     document.getElementById('refresh-users')?.addEventListener('click', () => loadUsers(container));
-    // Load stats for each user asynchronously
-    for (let user of users) {
-      loadUserStats(user.id);
-    }
+    for (let user of users) loadUserStats(user.id);
   } catch(err) { container.innerHTML = '<div class="error-msg">Error loading users</div>'; }
 }
 
@@ -220,7 +200,7 @@ async function loadUserStats(userId) {
       if (cells[2]) cells[2].innerHTML = `₹${(stats.totalProfit || 0).toFixed(2)}`;
       cells.forEach(c => c.classList.remove('stats-loading'));
     }
-  } catch(e) { console.error('Stats error for user', userId); }
+  } catch(e) {}
 }
 
 window.editUser = async (userId) => {
@@ -230,11 +210,10 @@ window.editUser = async (userId) => {
   if (!user) return;
   const statsRes = await fetchWithAuth(`${API_URL}/admin/users/${userId}/stats`);
   const stats = await statsRes.json();
-  
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.innerHTML = `
-    <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-content">
       <h3 style="color:#00ff88;">✏️ Edit User #${userId}</h3>
       <div class="user-stats-grid">
         <div class="user-stat-card"><div class="stat-label">Total Trades</div><div class="stat-value">${stats.totalTrades||0}</div></div>
@@ -335,16 +314,16 @@ async function loadDeposits(container) {
           <p><strong>User:</strong> ${username}</p>
           <p><strong>Amount:</strong> ₹${amount}</p>
           <label>📎 Transaction Proof (QR / UTR):</label>
-          <input type="text" id="proof-text" placeholder="Enter reference or upload ID" style="width:100%; margin:15px 0;">
+          <input type="text" id="proof-text" placeholder="Enter reference" style="width:100%; margin:15px 0;">
           <div style="display:flex; gap:12px;">
-            <button class="btn-approve" id="confirm-deposit" style="flex:1;">✅ Confirm & Add Balance</button>
-            <button class="btn-reject" id="cancel-modal" style="flex:1;">❌ Cancel</button>
+            <button class="btn-approve" id="confirm-deposit">✅ Confirm & Add Balance</button>
+            <button class="btn-reject" id="cancel-modal">❌ Cancel</button>
           </div>
         </div>
       `;
       document.body.appendChild(modal);
       document.getElementById('confirm-deposit').onclick = async () => {
-        const proof = document.getElementById('proof-text').value.trim() || 'No proof provided';
+        const proof = document.getElementById('proof-text').value.trim() || 'No proof';
         await fetchWithAuth(`${API_URL}/admin/deposits/${id}/approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -390,8 +369,8 @@ async function loadWithdrawals(container) {
           <p><strong>Amount:</strong> ₹${amount}</p>
           <p>This will deduct ₹${amount} from user's balance.</p>
           <div style="display:flex; gap:12px; margin-top:20px;">
-            <button class="btn-approve" id="confirm-withdraw" style="flex:1;">✅ Confirm & Deduct</button>
-            <button class="btn-reject" id="cancel-modal" style="flex:1;">❌ Cancel</button>
+            <button class="btn-approve" id="confirm-withdraw">✅ Confirm & Deduct</button>
+            <button class="btn-reject" id="cancel-modal">❌ Cancel</button>
           </div>
         </div>
       `;
@@ -417,12 +396,9 @@ async function loadAssets(container) {
         <table><thead><tr><th>ID</th><th>Name</th><th>Symbol</th><th>Price</th><th>Min</th><th>Max</th><th>Actions</th></tr></thead>
         <tbody>${assets.map(a => `
           <tr id="asset-row-${a.id}">
-            <td>${a.id}</td>
-            <td>${a.name}</td>
-            <td>${a.symbol}</td>
-            <td>₹${a.price.toFixed(2)}</td>
-            <td><input type="number" id="min-${a.id}" value="${a.min_price}" step="1" style="width:80px; background:#0a0a0a; border:1px solid #2a2a3a; color:white; padding:6px; border-radius:12px;"></td>
-            <td><input type="number" id="max-${a.id}" value="${a.max_price}" step="1" style="width:80px; background:#0a0a0a; border:1px solid #2a2a3a; color:white; padding:6px; border-radius:12px;"></td>
+            <td>${a.id}</td><td>${a.name}</td><td>${a.symbol}</td><td>₹${a.price.toFixed(2)}</td>
+            <td><input type="number" id="min-${a.id}" value="${a.min_price}" step="1" style="width:80px;"></td>
+            <td><input type="number" id="max-${a.id}" value="${a.max_price}" step="1" style="width:80px;"></td>
             <td><button class="btn-approve" onclick="window.updateAsset(${a.id})">💾 Update</button></td>
           </tr>
         `).join('')}</tbody></table>
@@ -447,74 +423,46 @@ async function loadSettings(container) {
   try {
     const res = await fetchWithAuth(`${API_URL}/admin/settings`);
     const data = await res.json();
-    const settings = data.settings ||ettings || {};
+    const settings = data.settings || {};
     container.innerHTML = `
- {};
-    container.innerHTML = `
-      <div class="data-table      <div class="data"><h2><i class="fas fa-sliders-table"><h2><i class="fas fa-sliders-h"></i> System Configuration-h"></i> System Configuration</h2>
-</h2>
-        <div class        <div class="setting-item="setting-item"><label>🏦"><label>🏦 Deposits Deposits Enabled:</label><select id Enabled:</label><select id="dep="deposit-enabledosit-enabled"><option value=""><option value="true" ${settingstrue".dep ${settings.deposit_enabled===osit_enabled===true?'true?'selected':selected':''}>Yes</option><option value="false''}>Yes</option><option value" ${="false" ${settings.depositsettings.deposit_enabled===false?'selected':''}>No_enabled===false?'selected':''}>No</option></select></div>
-        <div</option></select></div>
-        <div class=" class="setting-item"><labelsetting-item"><label>>⏰⏰ Deposit Time Window:</ Deposit Time Window:</label><input typelabel><input type="time" id="deposit-start="time" id="deposit-start" value" value="${settings.dep="${settings.deposit_startosit_start_time||'00:00'}">_time||'00:00'}"> to <input type="time" id="deposit-end to <input type="time" id="deposit-end" value="${settings" value="${settings.dep.deposit_end_time||osit_end_time||'23:59'}"></'23:59'}"></div>
-       div>
-        <div class="setting-item"><label> <div class="setting-item"><label>💸 Withdrawals Enabled:</label💸 Withdrawals Enabled:</label><select id="><select id="withdraw-enabledwithdraw-enabled"><option value="true" ${"><option value="true" ${settings.withdraw_enabled===settings.withdraw_enabled===true?'selected':''}>true?'selected':''}>Yes</option><option value="falseYes</option><option value="false" ${settings.with" ${settings.withdraw_enabled===false?'draw_enabled===false?'selected':selected':''}>No</''}>No</option></option></select></div>
-       select></div>
-        <div class="setting <div class="setting-item"><label>⏰ With-item"><label>⏰ Withdrawal Time Window:</drawal Time Window:</label><input type="time" idlabel><input type="time" id="withdraw-start="withdraw-start" value="${settings" value="${settings.withdraw.withdraw_start_time_start_time||'00:00'}||'00:00'}"> to <input type=""> to <input type="time" id="withdrawtime" id="withdraw-end" value="${settings.with-end" value="${settings.withdraw_end_timedraw_end_time||||'23'23:59'}"></:59'}"></div>
-div>
-        <div class        <div class="setting-item"><label>="setting-item"><label>📈 Profit Percentage📈 Profit Percentage (%):</label><input type=" (%):</label><input type="number"number" id="profit-per id="profit-percent" value="${settings.procent" value="${settings.profit_percentage||fit_percentage||80}"80}" min="10" max=" min="10" max="200"><br><small>Profit paid200"><br><small> to user on winning trade (Profit paid to user on winning trade (e.g., 80% = ₹e.g., 80% = ₹80 profit on ₹80 profit on ₹100 stake100 stake)</small></div)</small></div>
-       >
-        <button id=" <button id="save-ssave-settings" class="btn-save">ettings" class="btn-save">💾💾 Save All Settings</button Save All Settings</button>
->
-      </      </div>
+      <div class="data-table"><h2><i class="fas fa-sliders-h"></i> System Configuration</h2>
+        <div class="setting-item"><label>🏦 Deposits Enabled:</label><select id="deposit-enabled"><option value="true" ${settings.deposit_enabled===true?'selected':''}>Yes</option><option value="false" ${settings.deposit_enabled===false?'selected':''}>No</option></select></div>
+        <div class="setting-item"><label>⏰ Deposit Time Window:</label><input type="time" id="deposit-start" value="${settings.deposit_start_time||'00:00'}"> to <input type="time" id="deposit-end" value="${settings.deposit_end_time||'23:59'}"></div>
+        <div class="setting-item"><label>💸 Withdrawals Enabled:</label><select id="withdraw-enabled"><option value="true" ${settings.withdraw_enabled===true?'selected':''}>Yes</option><option value="false" ${settings.withdraw_enabled===false?'selected':''}>No</option></select></div>
+        <div class="setting-item"><label>⏰ Withdrawal Time Window:</label><input type="time" id="withdraw-start" value="${settings.withdraw_start_time||'00:00'}"> to <input type="time" id="withdraw-end" value="${settings.withdraw_end_time||'23:59'}"></div>
+        <div class="setting-item"><label>📈 Profit Percentage (%):</label><input type="number" id="profit-percent" value="${settings.profit_percentage||80}" min="10" max="200"><br><small>Profit paid to user on winning trade (e.g., 80% = ₹80 profit on ₹100 stake)</small></div>
+        <button id="save-settings" class="btn-save">💾 Save All Settings</button>
+      </div>
     `;
-   div>
-    `;
-    document.getElementById document.getElementById('save-settings').onclick = async () => {
-      const('save-settings').onclick = async () => {
-      const depositEnabled = document.getElementById(' depositEnabled = document.getElementById('deposit-enabled').value === 'true';
-      const withdrawEnabled = document.getElementByIddeposit-enabled').value === 'true';
-      const withdrawEnabled = document.getElementById('with('withdraw-enabled').valuedraw-enabled').value === ' === 'true';
-      consttrue';
-      const profitPercentage profitPercentage = parseInt(document.getElementById = parseInt(document.getElementById('profit-percent').value);
+    document.getElementById('save-settings').onclick = async () => {
+      const depositEnabled = document.getElementById('deposit-enabled').value === 'true';
+      const withdrawEnabled = document.getElementById('withdraw-enabled').value === 'true';
+      const profitPercentage = parseInt(document.getElementById('profit-percent').value);
       const depositStart = document.getElementById('deposit-start').value;
-     ('profit-percent').value);
-      const depositStart = document.getElementById('deposit-start').value const depositEnd = document.getElementById('deposit-end').value;
-     ;
       const depositEnd = document.getElementById('deposit-end').value;
       const withdrawStart = document.getElementById('withdraw-start').value;
-      const withdrawEnd = const withdrawStart = document.getElementById('withdraw-start').value;
-      document.getElementById('withdraw-end const withdrawEnd = document.getElementById('withdraw-end').value;
-      await fetch').value;
-      await fetchWithAuth(`${API_URL}/WithAuth(`${API_URL}/admin/sadmin/settings`, {
-        method:ettings`, {
-        method: 'POST 'POST',
-        headers:',
-        headers: { 'Content-Type { 'Content-Type': '': 'application/json' },
-application/json' },
-        body: JSON        body: JSON.stringify({
-.stringify({
-          deposit_enabled          deposit_enabled: depositEnabled,
-: depositEnabled,
-          withdraw          withdraw_enabled: withdrawEnabled,
-_enabled: withdrawEnabled,
+      const withdrawEnd = document.getElementById('withdraw-end').value;
+      await fetchWithAuth(`${API_URL}/admin/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deposit_enabled: depositEnabled,
+          withdraw_enabled: withdrawEnabled,
           profit_percentage: profitPercentage,
-          deposit_start_time: deposit          profit_percentage: profitPercentage,
           deposit_start_time: depositStart,
-          deposit_end_time: depositStart,
           deposit_end_time: depositEnd,
-          withdraw_start_timeEnd,
           withdraw_start_time: withdrawStart,
-          withdraw: withdrawStart,
-          withdraw_end_time_end_time: withdrawEnd
-: withdrawEnd
-        })
+          withdraw_end_time: withdrawEnd
         })
       });
-      alert      });
-      alert('✅('✅ Settings saved successfully! Settings saved successfully!');
-   ');
+      alert('✅ Settings saved successfully!');
     };
-  } catch };
-  } catch(err) { container.innerHTML(err) { container.innerHTML = '<div = '<div class="error-msg"> class="error-msg">Error loading settings</div>'; }
-Error loading settings</div>'; }
+  } catch(err) { container.innerHTML = '<div class="error-msg">Error loading settings</div>'; }
+}
+
+// Start
+if (adminToken) {
+  initAdminPanel().catch(() => showLoginForm('Session expired. Please login again.'));
+} else {
+  showLoginForm();
 }
