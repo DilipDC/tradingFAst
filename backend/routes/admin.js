@@ -18,7 +18,7 @@ router.use(async (req, res, next) => {
   }
 });
 
-// Get all users
+// ========== USERS ==========
 router.get('/users', async (req, res) => {
   try {
     const users = await UserModel.getAllUsers();
@@ -29,7 +29,7 @@ router.get('/users', async (req, res) => {
   }
 });
 
-// Get all trades
+// ========== TRADES ==========
 router.get('/trades', async (req, res) => {
   try {
     const trades = await TradeModel.getAllTrades();
@@ -40,7 +40,7 @@ router.get('/trades', async (req, res) => {
   }
 });
 
-// Get all deposits
+// ========== DEPOSITS ==========
 router.get('/deposits', async (req, res) => {
   try {
     const deposits = await TransactionModel.getDeposits();
@@ -51,20 +51,22 @@ router.get('/deposits', async (req, res) => {
   }
 });
 
-// Approve deposit
+// Approve deposit with proof_text
 router.post('/deposits/:id/approve', async (req, res) => {
   try {
     const depositId = req.params.id;
+    const { proof_text } = req.body;
     const deposits = await TransactionModel.getDeposits();
     const deposit = deposits.find(d => d.id == depositId);
-    
     if (!deposit || deposit.status !== 'pending') {
       return res.status(400).json({ error: 'Invalid deposit' });
     }
-    
-    await TransactionModel.updateDepositStatus(depositId, 'approved');
+    // Update deposit with proof and status
+    await db.run(
+      'UPDATE deposits SET status = "approved", approved_at = CURRENT_TIMESTAMP, proof_text = ? WHERE id = ?',
+      [proof_text || '', depositId]
+    );
     await UserModel.addBalance(deposit.user_id, deposit.amount);
-    
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -84,7 +86,7 @@ router.post('/deposits/:id/reject', async (req, res) => {
   }
 });
 
-// Get all withdrawals
+// ========== WITHDRAWALS ==========
 router.get('/withdrawals', async (req, res) => {
   try {
     const withdrawals = await TransactionModel.getWithdrawals();
@@ -95,21 +97,21 @@ router.get('/withdrawals', async (req, res) => {
   }
 });
 
-// Approve withdrawal
+// Approve withdrawal (deduct balance)
 router.post('/withdrawals/:id/approve', async (req, res) => {
   try {
     const withdrawalId = req.params.id;
     const withdrawals = await TransactionModel.getWithdrawals();
     const withdrawal = withdrawals.find(w => w.id == withdrawalId);
-    
     if (!withdrawal || withdrawal.status !== 'pending') {
       return res.status(400).json({ error: 'Invalid withdrawal' });
     }
-    
-    // Deduct balance if not already deducted
-    await UserModel.deductBalance(withdrawal.user_id, withdrawal.amount);
+    // Deduct balance
+    const deducted = await UserModel.deductBalance(withdrawal.user_id, withdrawal.amount);
+    if (deducted === 0) {
+      return res.status(400).json({ error: 'Insufficient balance' });
+    }
     await TransactionModel.updateWithdrawalStatus(withdrawalId, 'approved');
-    
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -129,25 +131,7 @@ router.post('/withdrawals/:id/reject', async (req, res) => {
   }
 });
 
-// Update asset min/max prices
-router.put('/assets/:id', async (req, res) => {
-  try {
-    const assetId = req.params.id;
-    const { min_price, max_price } = req.body;
-    
-    if (min_price >= max_price) {
-      return res.status(400).json({ error: 'Min price must be less than max price' });
-    }
-    
-    await AssetModel.updateMinMax(assetId, min_price, max_price);
-    res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Get all assets
+// ========== ASSETS ==========
 router.get('/assets', async (req, res) => {
   try {
     const assets = await AssetModel.getAll();
@@ -158,21 +142,14 @@ router.get('/assets', async (req, res) => {
   }
 });
 
-// Update admin settings
-router.post('/settings', async (req, res) => {
+router.put('/assets/:id', async (req, res) => {
   try {
-    const { deposit_enabled, withdraw_enabled, profit_percentage } = req.body;
-    
-    if (deposit_enabled !== undefined) {
-      await db.run('INSERT OR REPLACE INTO admin_settings (key, value) VALUES (?, ?)', ['deposit_enabled', deposit_enabled.toString()]);
+    const assetId = req.params.id;
+    const { min_price, max_price } = req.body;
+    if (min_price >= max_price) {
+      return res.status(400).json({ error: 'Min price must be less than max price' });
     }
-    if (withdraw_enabled !== undefined) {
-      await db.run('INSERT OR REPLACE INTO admin_settings (key, value) VALUES (?, ?)', ['withdraw_enabled', withdraw_enabled.toString()]);
-    }
-    if (profit_percentage !== undefined) {
-      await db.run('INSERT OR REPLACE INTO admin_settings (key, value) VALUES (?, ?)', ['profit_percentage', profit_percentage.toString()]);
-    }
-    
+    await AssetModel.updateMinMax(assetId, min_price, max_price);
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -180,7 +157,7 @@ router.post('/settings', async (req, res) => {
   }
 });
 
-// Get admin settings
+// ========== SETTINGS (with time windows) ==========
 router.get('/settings', async (req, res) => {
   try {
     const settings = {};
@@ -196,6 +173,47 @@ router.get('/settings', async (req, res) => {
       else settings[row.key] = row.value;
     });
     res.json({ settings });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/settings', async (req, res) => {
+  try {
+    const {
+      deposit_enabled,
+      withdraw_enabled,
+      profit_percentage,
+      deposit_start_time,
+      deposit_end_time,
+      withdraw_start_time,
+      withdraw_end_time
+    } = req.body;
+
+    if (deposit_enabled !== undefined) {
+      await db.run('INSERT OR REPLACE INTO admin_settings (key, value) VALUES (?, ?)', ['deposit_enabled', deposit_enabled.toString()]);
+    }
+    if (withdraw_enabled !== undefined) {
+      await db.run('INSERT OR REPLACE INTO admin_settings (key, value) VALUES (?, ?)', ['withdraw_enabled', withdraw_enabled.toString()]);
+    }
+    if (profit_percentage !== undefined) {
+      await db.run('INSERT OR REPLACE INTO admin_settings (key, value) VALUES (?, ?)', ['profit_percentage', profit_percentage.toString()]);
+    }
+    if (deposit_start_time !== undefined) {
+      await db.run('INSERT OR REPLACE INTO admin_settings (key, value) VALUES (?, ?)', ['deposit_start_time', deposit_start_time]);
+    }
+    if (deposit_end_time !== undefined) {
+      await db.run('INSERT OR REPLACE INTO admin_settings (key, value) VALUES (?, ?)', ['deposit_end_time', deposit_end_time]);
+    }
+    if (withdraw_start_time !== undefined) {
+      await db.run('INSERT OR REPLACE INTO admin_settings (key, value) VALUES (?, ?)', ['withdraw_start_time', withdraw_start_time]);
+    }
+    if (withdraw_end_time !== undefined) {
+      await db.run('INSERT OR REPLACE INTO admin_settings (key, value) VALUES (?, ?)', ['withdraw_end_time', withdraw_end_time]);
+    }
+
+    res.json({ success: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
