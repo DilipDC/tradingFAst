@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: tradingfast-backend
+    env: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DB_PATH
+        value: ./database/trading.db
+      - key: PRICE_ENGINE_INTERVAL
+        value: 3000
+      - key: TRADE_SETTLEMENT_INTERVAL
+        value: 2000
+      - key: DEFAULT_PROFIT_PERCENTAGE
+        value: 80
+      - key: MIN_TRADE_AMOUNT
+        value: 100
+      - key: MIN_DEPOSIT_AMOUNT
+        value: 100
+      - key: MIN_WITHDRAW_AMOUNT
+        value: 100
+    plan: free
+    healthCheckPath: /api/admin/settings

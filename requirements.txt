@@ -1,0 +1,26 @@
+# TradingFast - Backend Dependencies
+# This is a Node.js project. Install using: npm install
+
+# Required Node.js version: v14 or higher
+
+# Backend dependencies (see package.json):
+- express ^4.18.2
+- sqlite3 ^5.1.6
+- bcryptjs ^2.4.3
+- jsonwebtoken ^9.0.2
+- cors ^2.8.5
+- dotenv ^16.3.1
+- express-rate-limit ^6.10.0
+
+# Dev dependencies:
+- nodemon ^3.0.1
+
+# Frontend dependencies (CDN based):
+- Chart.js (via CDN)
+- Font Awesome 6.4.0
+- Google Fonts (Inter)
+
+# To run the project:
+# 1. cd backend
+# 2. npm install
+# 3. npm start
