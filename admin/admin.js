@@ -3,7 +3,7 @@ const API_URL = window.location.origin + '/api';
 let adminToken = localStorage.getItem('adminToken');
 let currentSection = 'dashboard';
 
-// ========== INIT & PRELOADER ==========
+// Preloader removal
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
     const preloader = document.querySelector('.preloader');
@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => preloader.remove(), 800);
     }
   }, 1500);
+  
   if (adminToken) {
     verifyTokenAndStart();
   } else {
@@ -23,20 +24,23 @@ async function verifyTokenAndStart() {
   try {
     await fetchWithAuth(`${API_URL}/admin/settings`);
     initAdminPanel();
-  } catch {
+  } catch (err) {
+    console.error('Token verification failed:', err);
+    localStorage.removeItem('adminToken');
     showLoginForm('Session expired. Please login again.');
   }
 }
 
-// ========== AUTH HELPERS ==========
 async function fetchWithAuth(url, options = {}) {
   const res = await fetch(url, {
     ...options,
-    headers: { ...options.headers, 'Authorization': `Bearer ${adminToken}` }
+    headers: {
+      ...options.headers,
+      'Authorization': `Bearer ${adminToken}`
+    }
   });
   if (res.status === 401) {
     localStorage.removeItem('adminToken');
-    showLoginForm('Session expired. Please login again.');
     throw new Error('Unauthorized');
   }
   return res;
@@ -45,7 +49,7 @@ async function fetchWithAuth(url, options = {}) {
 function showLoginForm(errorMsg = '') {
   const root = document.getElementById('admin-root');
   root.innerHTML = `
-    <div class="login-container" data-aos="fade-up">
+    <div class="login-container">
       <div class="login-card">
         <h2 style="text-align:center; margin-bottom:25px; color:#00ff88;">⚡ ADMIN NEXUS</h2>
         ${errorMsg ? `<div class="error-msg" style="color:#ff6680; text-align:center; margin-bottom:15px;">${errorMsg}</div>` : ''}
@@ -77,13 +81,12 @@ function showLoginForm(errorMsg = '') {
         showLoginForm('Invalid admin credentials');
       }
     } catch (err) {
+      console.error('Login error:', err);
       showLoginForm('Network error – backend unreachable');
     }
   };
-  if (window.AOS) AOS.refresh();
 }
 
-// ========== MAIN PANEL WITH ANIMATIONS ==========
 async function initAdminPanel() {
   const root = document.getElementById('admin-root');
   root.innerHTML = `
@@ -107,14 +110,18 @@ async function initAdminPanel() {
             <button class="logout-btn" id="logout-btn"><i class="fas fa-sign-out-alt"></i> Exit</button>
           </div>
         </div>
-        <div id="section-content" class="section-content" data-aos="fade-up">Loading...</div>
+        <div id="section-content" class="section-content">Loading...</div>
       </main>
     </div>
   `;
+  
+  // FIXED LOGOUT: Clear token and reload the login form
   document.getElementById('logout-btn').onclick = () => {
     localStorage.removeItem('adminToken');
-    showLoginForm();
+    adminToken = null;
+    showLoginForm(); // This replaces the entire DOM with login form
   };
+  
   document.querySelectorAll('.nav-link').forEach(link => {
     link.onclick = () => {
       document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
@@ -126,7 +133,6 @@ async function initAdminPanel() {
   await loadSection('dashboard');
   const container = document.querySelector('.admin-container');
   if (container) container.classList.add('loaded');
-  if (window.AOS) AOS.refresh();
 }
 
 async function loadSection(section) {
@@ -143,7 +149,6 @@ async function loadSection(section) {
   }
 }
 
-// ========== DASHBOARD ==========
 async function loadDashboard(container) {
   try {
     const [usersRes, tradesRes, depositsRes, withdrawalsRes] = await Promise.all([
@@ -159,21 +164,22 @@ async function loadDashboard(container) {
     const totalBalance = users.reduce((sum, u) => sum + (u.balance || 0), 0);
     const pendingDeposits = deposits.filter(d => d.status === 'pending').length;
     const pendingWithdrawals = withdrawals.filter(w => w.status === 'pending').length;
-
     container.innerHTML = `
       <div class="stats-grid">
-        <div class="stat-card" data-aos="zoom-in"><h3>👥 Total Users</h3><div class="stat-number">${users.length}</div></div>
-        <div class="stat-card" data-aos="zoom-in" data-aos-delay="100"><h3>💰 Total Balance</h3><div class="stat-number">₹${totalBalance.toFixed(2)}</div></div>
-        <div class="stat-card" data-aos="zoom-in" data-aos-delay="200"><h3>📊 Total Trades</h3><div class="stat-number">${trades.length}</div></div>
-        <div class="stat-card" data-aos="zoom-in" data-aos-delay="300"><h3>⏳ Pending Deposits</h3><div class="stat-number">${pendingDeposits}</div></div>
-        <div class="stat-card" data-aos="zoom-in" data-aos-delay="400"><h3>⌛ Pending Withdrawals</h3><div class="stat-number">${pendingWithdrawals}</div></div>
+        <div class="stat-card"><h3>👥 Total Users</h3><div class="stat-number">${users.length}</div></div>
+        <div class="stat-card"><h3>💰 Total Balance</h3><div class="stat-number">₹${totalBalance.toFixed(2)}</div></div>
+        <div class="stat-card"><h3>📊 Total Trades</h3><div class="stat-number">${trades.length}</div></div>
+        <div class="stat-card"><h3>⏳ Pending Deposits</h3><div class="stat-number">${pendingDeposits}</div></div>
+        <div class="stat-card"><h3>⌛ Pending Withdrawals</h3><div class="stat-number">${pendingWithdrawals}</div></div>
       </div>
-      <div class="data-table" data-aos="fade-up">
-        <h3>📜 Recent Trades</h3>
+      <div class="data-table"><h3>📜 Recent Trades</h3>
         <table><thead><tr><th>User</th><th>Asset</th><th>Amount</th><th>Direction</th><th>Result</th><th>Profit</th><th>Date</th></tr></thead>
         <tbody>${trades.slice(0,10).map(t => `
           <tr>
-            <td>${t.username || '?'}</td><td>${t.asset_name || t.symbol || '?'}</td><td>₹${t.amount}</td><td>${t.direction}</td>
+            <td>${t.username || '?'}</td>
+            <td>${t.asset_name || t.symbol || '?'}</td>
+            <td>₹${t.amount}</td>
+            <td>${t.direction}</td>
             <td><span class="badge ${t.result === 'win' ? 'badge-approved' : (t.result === 'loss' ? 'badge-rejected' : 'badge-pending')}">${t.result || 'pending'}</span></td>
             <td style="color:${t.profit>0?'#00ff88':'#ff6680'}">${t.profit>0?'+':''}₹${t.profit||0}</td>
             <td>${new Date(t.created_at).toLocaleString()}</td>
@@ -181,26 +187,28 @@ async function loadDashboard(container) {
         `).join('')}</tbody></table>
       </div>
     `;
-    if (window.AOS) AOS.refresh();
   } catch(err) { container.innerHTML = '<div class="error-msg">Error loading dashboard</div>'; }
 }
 
-// ========== USERS (with Time Joined) ==========
 async function loadUsers(container) {
   try {
     const res = await fetchWithAuth(`${API_URL}/admin/users`);
     const data = await res.json();
     const users = data.users || [];
     container.innerHTML = `
-      <div class="data-table" data-aos="fade-up">
-        <h2><i class="fas fa-users"></i> User Registry</h2>
+      <div class="data-table"><h2><i class="fas fa-users"></i> User Registry</h2>
         <table><thead><tr><th>ID</th><th>Username</th><th>Balance</th><th>Level</th><th>Time Joined</th></tr></thead>
         <tbody>${users.map(u => `
-          <tr><td>${u.id}</td><td>${u.username}</td><td>₹${(u.balance||0).toFixed(2)}</td><td>${u.level||1}</td><td>${new Date(u.created_at).toLocaleString()}</td></tr>
+          <tr>
+            <td>${u.id}</td>
+            <td>${u.username}</td>
+            <td>₹${(u.balance||0).toFixed(2)}</td>
+            <td>${u.level||1}</td>
+            <td>${new Date(u.created_at).toLocaleString()}</td>
+          </tr>
         `).join('')}</tbody></table>
       </div>
     `;
-    if (window.AOS) AOS.refresh();
   } catch(err) { container.innerHTML = '<div class="error-msg">Error loading users</div>'; }
 }
 
@@ -210,13 +218,17 @@ async function loadTrades(container) {
     const data = await res.json();
     const trades = data.trades || [];
     container.innerHTML = `
-      <div class="data-table" data-aos="fade-up">
-        <h2><i class="fas fa-chart-line"></i> All Trades</h2>
+      <div class="data-table"><h2><i class="fas fa-chart-line"></i> All Trades</h2>
         <table><thead><tr><th>User</th><th>Asset</th><th>Amount</th><th>Direction</th><th>Duration</th><th>Start</th><th>End</th><th>Result</th><th>Profit</th><th>Date</th></tr></thead>
         <tbody>${trades.map(t => `
           <tr>
-            <td>${t.username||'?'}</td><td>${t.asset_name||t.symbol||'?'}</td><td>₹${t.amount}</td><td>${t.direction}</td><td>${t.duration}s</td>
-            <td>₹${t.start_price}</td><td>${t.end_price ? '₹'+t.end_price : '-'}</td>
+            <td>${t.username||'?'}</td>
+            <td>${t.asset_name||t.symbol||'?'}</td>
+            <td>₹${t.amount}</td>
+            <td>${t.direction}</td>
+            <td>${t.duration}s</td>
+            <td>₹${t.start_price}</td>
+            <td>${t.end_price ? '₹'+t.end_price : '-'}</td>
             <td><span class="badge ${t.result==='win'?'badge-approved':(t.result==='loss'?'badge-rejected':'badge-pending')}">${t.result||'pending'}</span></td>
             <td style="color:${t.profit>0?'#00ff88':'#ff6680'}">${t.profit>0?'+':''}₹${t.profit||0}</td>
             <td>${new Date(t.created_at).toLocaleString()}</td>
@@ -224,23 +236,21 @@ async function loadTrades(container) {
         `).join('')}</tbody></table>
       </div>
     `;
-    if (window.AOS) AOS.refresh();
   } catch(err) { container.innerHTML = '<div class="error-msg">Error loading trades</div>'; }
 }
 
-// ========== DEPOSITS with MODAL (QR Proof) ==========
 async function loadDeposits(container) {
   try {
     const res = await fetchWithAuth(`${API_URL}/admin/deposits`);
     const data = await res.json();
     const deposits = data.deposits || [];
     container.innerHTML = `
-      <div class="data-table" data-aos="fade-up">
-        <h2><i class="fas fa-download"></i> Deposit Requests</h2>
+      <div class="data-table"><h2><i class="fas fa-download"></i> Deposit Requests</h2>
         <table><thead><tr><th>User</th><th>Amount</th><th>Status</th><th>Date</th><th>Accept</th></tr></thead>
         <tbody>${deposits.map(d => `
           <tr>
-            <td>${d.username}</td><td>₹${d.amount}</td>
+            <td>${d.username}</td>
+            <td>₹${d.amount}</td>
             <td><span class="badge ${d.status==='approved'?'badge-approved':(d.status==='rejected'?'badge-rejected':'badge-pending')}">${d.status}</span></td>
             <td>${new Date(d.created_at).toLocaleString()}</td>
             <td>${d.status === 'pending' ? `<button class="btn-approve" onclick="window.showDepositModal(${d.id}, ${d.amount}, '${d.username}')">✅ Accept</button>` : '✔️ Completed'}</td>
@@ -277,23 +287,23 @@ async function loadDeposits(container) {
       };
       document.getElementById('cancel-modal').onclick = () => modal.remove();
     };
-    if (window.AOS) AOS.refresh();
   } catch(err) { container.innerHTML = '<div class="error-msg">Error loading deposits</div>'; }
 }
 
-// ========== WITHDRAWALS with MODAL ==========
 async function loadWithdrawals(container) {
   try {
     const res = await fetchWithAuth(`${API_URL}/admin/withdrawals`);
     const data = await res.json();
     const withdrawals = data.withdrawals || [];
     container.innerHTML = `
-      <div class="data-table" data-aos="fade-up">
-        <h2><i class="fas fa-upload"></i> Withdrawal Requests</h2>
+      <div class="data-table"><h2><i class="fas fa-upload"></i> Withdrawal Requests</h2>
         <table><thead><tr><th>User</th><th>Amount</th><th>UPI ID</th><th>Name</th><th>Status</th><th>Date</th><th>Accept</th></tr></thead>
         <tbody>${withdrawals.map(w => `
           <tr>
-            <td>${w.username}</td><td>₹${w.amount}</td><td>${w.upi_id}</td><td>${w.account_name}</td>
+            <td>${w.username}</td>
+            <td>₹${w.amount}</td>
+            <td>${w.upi_id}</td>
+            <td>${w.account_name}</td>
             <td><span class="badge ${w.status==='approved'?'badge-approved':(w.status==='rejected'?'badge-rejected':'badge-pending')}">${w.status}</span></td>
             <td>${new Date(w.created_at).toLocaleString()}</td>
             <td>${w.status === 'pending' ? `<button class="btn-approve" onclick="window.showWithdrawModal(${w.id}, ${w.amount}, '${w.username}')">✅ Accept</button>` : '✔️ Done'}</td>
@@ -324,19 +334,16 @@ async function loadWithdrawals(container) {
       };
       document.getElementById('cancel-modal').onclick = () => modal.remove();
     };
-    if (window.AOS) AOS.refresh();
   } catch(err) { container.innerHTML = '<div class="error-msg">Error loading withdrawals</div>'; }
 }
 
-// ========== ASSETS ==========
 async function loadAssets(container) {
   try {
     const res = await fetchWithAuth(`${API_URL}/admin/assets`);
     const data = await res.json();
     const assets = data.assets || [];
     container.innerHTML = `
-      <div class="data-table" data-aos="fade-up">
-        <h2><i class="fas fa-coins"></i> Asset Management</h2>
+      <div class="data-table"><h2><i class="fas fa-coins"></i> Asset Management</h2>
         <table><thead><tr><th>ID</th><th>Name</th><th>Symbol</th><th>Price</th><th>Min</th><th>Max</th><th>Actions</th></tr></thead>
         <tbody>${assets.map(a => `
           <tr id="asset-row-${a.id}">
@@ -359,19 +366,16 @@ async function loadAssets(container) {
       });
       loadSection('assets');
     };
-    if (window.AOS) AOS.refresh();
   } catch(err) { container.innerHTML = '<div class="error-msg">Error loading assets</div>'; }
 }
 
-// ========== SETTINGS (Time Windows + Profit %) ==========
 async function loadSettings(container) {
   try {
     const res = await fetchWithAuth(`${API_URL}/admin/settings`);
     const data = await res.json();
     const settings = data.settings || {};
     container.innerHTML = `
-      <div class="data-table" data-aos="fade-up">
-        <h2><i class="fas fa-sliders-h"></i> System Configuration</h2>
+      <div class="data-table"><h2><i class="fas fa-sliders-h"></i> System Configuration</h2>
         <div class="setting-item"><label>🏦 Deposits Enabled:</label><select id="deposit-enabled"><option value="true" ${settings.deposit_enabled===true?'selected':''}>Yes</option><option value="false" ${settings.deposit_enabled===false?'selected':''}>No</option></select></div>
         <div class="setting-item"><label>⏰ Deposit Time Window:</label><input type="time" id="deposit-start" value="${settings.deposit_start_time||'00:00'}"> to <input type="time" id="deposit-end" value="${settings.deposit_end_time||'23:59'}"></div>
         <div class="setting-item"><label>💸 Withdrawals Enabled:</label><select id="withdraw-enabled"><option value="true" ${settings.withdraw_enabled===true?'selected':''}>Yes</option><option value="false" ${settings.withdraw_enabled===false?'selected':''}>No</option></select></div>
@@ -403,6 +407,5 @@ async function loadSettings(container) {
       });
       alert('✅ Settings saved successfully!');
     };
-    if (window.AOS) AOS.refresh();
   } catch(err) { container.innerHTML = '<div class="error-msg">Error loading settings</div>'; }
 }
