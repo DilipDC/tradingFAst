@@ -1,7 +1,9 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const bcrypt = require('bcryptjs');
 
+// Ensure database directory exists
 const dbDir = path.join(__dirname, '../../database');
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
@@ -13,91 +15,74 @@ const db = new sqlite3.Database(dbPath);
 function initDatabase() {
   return new Promise((resolve, reject) => {
     db.serialize(() => {
-      // Users table
-      db.run(`
-        CREATE TABLE IF NOT EXISTS users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          username TEXT UNIQUE NOT NULL,
-          password TEXT NOT NULL,
-          balance REAL DEFAULT 0,
-          level INTEGER DEFAULT 1,
-          xp INTEGER DEFAULT 0,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
+      // Create tables (same as before)
+      db.run(`CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        balance REAL DEFAULT 0,
+        level INTEGER DEFAULT 1,
+        xp INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
 
-      // Assets table
-      db.run(`
-        CREATE TABLE IF NOT EXISTS assets (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT UNIQUE NOT NULL,
-          symbol TEXT NOT NULL,
-          price REAL NOT NULL,
-          min_price REAL NOT NULL,
-          max_price REAL NOT NULL,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
+      db.run(`CREATE TABLE IF NOT EXISTS assets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        symbol TEXT NOT NULL,
+        price REAL NOT NULL,
+        min_price REAL NOT NULL,
+        max_price REAL NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
 
-      // Trades table
-      db.run(`
-        CREATE TABLE IF NOT EXISTS trades (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          asset_id INTEGER NOT NULL,
-          amount REAL NOT NULL,
-          direction TEXT NOT NULL,
-          duration INTEGER NOT NULL,
-          start_price REAL NOT NULL,
-          end_price REAL,
-          status TEXT DEFAULT 'pending',
-          result TEXT,
-          profit REAL DEFAULT 0,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          closed_at DATETIME,
-          FOREIGN KEY(user_id) REFERENCES users(id),
-          FOREIGN KEY(asset_id) REFERENCES assets(id)
-        )
-      `);
+      db.run(`CREATE TABLE IF NOT EXISTS trades (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        asset_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        direction TEXT NOT NULL,
+        duration INTEGER NOT NULL,
+        start_price REAL NOT NULL,
+        end_price REAL,
+        status TEXT DEFAULT 'pending',
+        result TEXT,
+        profit REAL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        closed_at DATETIME,
+        FOREIGN KEY(user_id) REFERENCES users(id),
+        FOREIGN KEY(asset_id) REFERENCES assets(id)
+      )`);
 
-      // Deposits table
-      db.run(`
-        CREATE TABLE IF NOT EXISTS deposits (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          amount REAL NOT NULL,
-          qr_code TEXT,
-          status TEXT DEFAULT 'pending',
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          approved_at DATETIME,
-          FOREIGN KEY(user_id) REFERENCES users(id)
-        )
-      `);
+      db.run(`CREATE TABLE IF NOT EXISTS deposits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        qr_code TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        approved_at DATETIME,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+      )`);
 
-      // Withdrawals table
-      db.run(`
-        CREATE TABLE IF NOT EXISTS withdrawals (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          amount REAL NOT NULL,
-          upi_id TEXT NOT NULL,
-          account_name TEXT NOT NULL,
-          status TEXT DEFAULT 'pending',
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          approved_at DATETIME,
-          FOREIGN KEY(user_id) REFERENCES users(id)
-        )
-      `);
+      db.run(`CREATE TABLE IF NOT EXISTS withdrawals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        upi_id TEXT NOT NULL,
+        account_name TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        approved_at DATETIME,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+      )`);
 
-      // Admin settings table
-      db.run(`
-        CREATE TABLE IF NOT EXISTS admin_settings (
-          key TEXT PRIMARY KEY,
-          value TEXT NOT NULL
-        )
-      `);
+      db.run(`CREATE TABLE IF NOT EXISTS admin_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )`);
 
-      // Insert default assets if not exists
+      // Insert default assets (if not exist)
       const defaultAssets = [
         ['Apple Inc.', 'AAPL', 175.50, 150.00, 200.00],
         ['Microsoft', 'MSFT', 330.25, 300.00, 360.00],
@@ -110,28 +95,25 @@ function initDatabase() {
         ['AMD', 'AMD', 160.40, 140.00, 190.00],
         ['PayPal', 'PYPL', 65.20, 55.00, 80.00]
       ];
-
       defaultAssets.forEach(asset => {
-        db.run(`
-          INSERT OR IGNORE INTO assets (name, symbol, price, min_price, max_price)
-          VALUES (?, ?, ?, ?, ?)
-        `, asset);
+        db.run(`INSERT OR IGNORE INTO assets (name, symbol, price, min_price, max_price) VALUES (?, ?, ?, ?, ?)`, asset);
       });
 
       // Insert default admin settings
-      db.run(`
-        INSERT OR IGNORE INTO admin_settings (key, value) VALUES 
+      db.run(`INSERT OR IGNORE INTO admin_settings (key, value) VALUES 
         ('deposit_enabled', 'true'),
         ('withdraw_enabled', 'true'),
-        ('profit_percentage', '80')
-      `);
+        ('profit_percentage', '80')`);
 
-      // Insert default admin user (username: admin, password: admin123)
-      const bcrypt = require('bcryptjs');
+      // 🔥 AUTO-CREATE ADMIN USER (if not exists) – NO SHELL NEEDED 🔥
       const adminHash = bcrypt.hashSync('admin123', 10);
-      db.run(`
-        INSERT OR IGNORE INTO users (username, password, balance) VALUES (?, ?, ?)
-      `, ['admin', adminHash, 0]);
+      db.run(`INSERT OR IGNORE INTO users (username, password, balance) VALUES (?, ?, ?)`, 
+        ['admin', adminHash, 0], 
+        (err) => {
+          if (err) console.error('Admin creation error:', err);
+          else console.log('Admin user ready (admin/admin123)');
+        }
+      );
 
       resolve();
     });
