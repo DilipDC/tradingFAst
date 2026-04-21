@@ -15,7 +15,7 @@ const db = new sqlite3.Database(dbPath);
 function initDatabase() {
   return new Promise((resolve, reject) => {
     db.serialize(() => {
-      // Create tables (same as before)
+      // Users table
       db.run(`CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
@@ -26,6 +26,7 @@ function initDatabase() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 
+      // Assets table
       db.run(`CREATE TABLE IF NOT EXISTS assets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE NOT NULL,
@@ -36,6 +37,7 @@ function initDatabase() {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 
+      // Trades table
       db.run(`CREATE TABLE IF NOT EXISTS trades (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
@@ -54,17 +56,27 @@ function initDatabase() {
         FOREIGN KEY(asset_id) REFERENCES assets(id)
       )`);
 
+      // Deposits table (with proof_text column for admin reference)
       db.run(`CREATE TABLE IF NOT EXISTS deposits (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         amount REAL NOT NULL,
         qr_code TEXT,
+        proof_text TEXT,
         status TEXT DEFAULT 'pending',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         approved_at DATETIME,
         FOREIGN KEY(user_id) REFERENCES users(id)
       )`);
 
+      // Add proof_text column if upgrading from old schema
+      db.run(`ALTER TABLE deposits ADD COLUMN proof_text TEXT`, (err) => {
+        if (err && !err.message.includes('duplicate column')) {
+          console.log('Note: proof_text column already exists or error:', err.message);
+        }
+      });
+
+      // Withdrawals table
       db.run(`CREATE TABLE IF NOT EXISTS withdrawals (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
@@ -77,12 +89,13 @@ function initDatabase() {
         FOREIGN KEY(user_id) REFERENCES users(id)
       )`);
 
+      // Admin settings table
       db.run(`CREATE TABLE IF NOT EXISTS admin_settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       )`);
 
-      // Insert default assets (if not exist)
+      // Insert default assets
       const defaultAssets = [
         ['Apple Inc.', 'AAPL', 175.50, 150.00, 200.00],
         ['Microsoft', 'MSFT', 330.25, 300.00, 360.00],
@@ -99,19 +112,24 @@ function initDatabase() {
         db.run(`INSERT OR IGNORE INTO assets (name, symbol, price, min_price, max_price) VALUES (?, ?, ?, ?, ?)`, asset);
       });
 
-      // Insert default admin settings
+      // Insert default admin settings (with time windows)
       db.run(`INSERT OR IGNORE INTO admin_settings (key, value) VALUES 
         ('deposit_enabled', 'true'),
         ('withdraw_enabled', 'true'),
-        ('profit_percentage', '80')`);
+        ('profit_percentage', '80'),
+        ('deposit_start_time', '00:00'),
+        ('deposit_end_time', '23:59'),
+        ('withdraw_start_time', '00:00'),
+        ('withdraw_end_time', '23:59')
+      `);
 
-      // 🔥 AUTO-CREATE ADMIN USER (if not exists) – NO SHELL NEEDED 🔥
+      // Auto-create admin user (username: admin, password: admin123)
       const adminHash = bcrypt.hashSync('admin123', 10);
       db.run(`INSERT OR IGNORE INTO users (username, password, balance) VALUES (?, ?, ?)`, 
-        ['admin', adminHash, 0], 
+        ['admin', adminHash, 0],
         (err) => {
           if (err) console.error('Admin creation error:', err);
-          else console.log('Admin user ready (admin/admin123)');
+          else console.log('✅ Admin user ready (admin / admin123)');
         }
       );
 
