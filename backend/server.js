@@ -30,7 +30,7 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Routes
+// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/trade', tradeRoutes);
 app.use('/api/wallet', walletRoutes);
@@ -41,14 +41,15 @@ app.use('/api/withdraw', withdrawRoutes);
 // Serve admin panel
 app.use('/admin', express.static(path.join(__dirname, '../admin')));
 
-// Initialize database and start server
+// Initialize database and start engines
 initDatabase().then(() => {
   startPriceEngine();
   startTradeEngine();
   app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📊 Admin panel: http://localhost:${PORT}/admin`);
   });
 }).catch(err => {
-  console.error('Failed to initialize database:', err);
+  console.error('❌ Failed to initialize database:', err);
   process.exit(1);
 });
