@@ -25,7 +25,6 @@ body {
   align-items: center;
   z-index: 1000;
 }
-
 .spinner {
   width: 50px;
   height: 50px;
@@ -34,31 +33,20 @@ body {
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Main App Container */
 #app {
   min-height: 100vh;
   padding-bottom: 70px;
 }
 
-/* Glassmorphism Cards */
+/* Glassmorphism */
 .glass-card {
   background: rgba(20, 20, 30, 0.7);
   backdrop-filter: blur(10px);
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
   transition: all 0.3s ease;
-}
-
-.glass-card:hover {
-  border-color: rgba(0, 255, 136, 0.3);
-  box-shadow: 0 8px 25px rgba(0, 255, 136, 0.1);
-  transform: translateY(-2px);
 }
 
 /* Buttons */
@@ -69,31 +57,16 @@ body {
   font-weight: 600;
   font-size: 16px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: inherit;
+  transition: 0.2s;
 }
-
 .btn-primary {
   background: linear-gradient(135deg, #00ff88, #00cc6a);
   color: #0a0a0a;
-  box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3);
 }
-
-.btn-primary:active {
-  transform: scale(0.96);
-}
-
-.btn-secondary {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
 .btn-up {
   background: linear-gradient(135deg, #00ff88, #00aa55);
   color: #0a0a0a;
 }
-
 .btn-down {
   background: linear-gradient(135deg, #ff3355, #cc2244);
   color: #fff;
@@ -113,25 +86,17 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   z-index: 100;
 }
-
 .nav-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   color: #888;
-  transition: color 0.2s;
   cursor: pointer;
   font-size: 12px;
 }
-
-.nav-item i {
-  font-size: 22px;
-}
-
-.nav-item.active {
-  color: #00ff88;
-}
+.nav-item i { font-size: 22px; }
+.nav-item.active { color: #00ff88; }
 
 /* Pages */
 .page {
@@ -139,22 +104,17 @@ body {
   animation: fadeIn 0.3s ease;
   padding: 20px;
 }
-
-.page.active {
-  display: block;
-}
-
+.page.active { display: block; }
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Terminal (Trading) Page */
+/* Terminal Page */
 .asset-header {
   text-align: center;
   margin-bottom: 20px;
 }
-
 .asset-name {
   font-size: 24px;
   font-weight: 700;
@@ -163,26 +123,18 @@ body {
   background-clip: text;
   color: transparent;
 }
-
 .asset-price {
   font-size: 42px;
   font-weight: 800;
   color: #00ff88;
-  text-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+  text-shadow: 0 0 10px rgba(0,255,136,0.3);
 }
-
-.price-change {
-  font-size: 14px;
-  margin-top: 5px;
-}
-
 .chart-container {
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0,0,0,0.5);
   border-radius: 20px;
   padding: 15px;
   margin: 20px 0;
 }
-
 .timer-display {
   text-align: center;
   font-size: 32px;
@@ -193,40 +145,28 @@ body {
   border-radius: 50px;
   margin: 15px 0;
 }
-
-.amount-selector, .time-selector {
-  margin: 15px 0;
-}
-
-.amount-buttons {
+.amount-buttons, .time-buttons {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
   margin-top: 10px;
 }
-
 .amount-btn, .time-btn {
   background: #1a1a2a;
   border: 1px solid #2a2a3a;
   padding: 10px 20px;
   border-radius: 30px;
-  color: white;
   cursor: pointer;
-  transition: all 0.2s;
 }
-
 .amount-btn.active, .time-btn.active {
   background: #00ff88;
   color: #0a0a0a;
-  border-color: #00ff88;
 }
-
 .trade-buttons {
   display: flex;
   gap: 15px;
   margin-top: 25px;
 }
-
 .trade-buttons button {
   flex: 1;
   padding: 16px;
@@ -234,7 +174,7 @@ body {
   font-weight: 700;
 }
 
-/* Trades Page */
+/* Trade History Card */
 .trade-card {
   background: #111118;
   border-radius: 16px;
@@ -242,26 +182,11 @@ body {
   margin-bottom: 12px;
   border-left: 4px solid #444;
 }
-
-.trade-card.win {
-  border-left-color: #00ff88;
-}
-
-.trade-card.loss {
-  border-left-color: #ff3355;
-}
-
-.trade-card.pending {
-  border-left-color: #ffaa00;
-}
+.trade-card.win { border-left-color: #00ff88; }
+.trade-card.loss { border-left-color: #ff3355; }
+.trade-card.pending { border-left-color: #ffaa00; }
 
 /* Market Page */
-.asset-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .asset-item {
   background: #111118;
   border-radius: 16px;
@@ -269,68 +194,28 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 10px;
   cursor: pointer;
-  transition: all 0.2s;
 }
+.asset-current-price { color: #00ff88; font-weight: bold; }
 
-.asset-item:hover {
-  background: #1a1a28;
-  transform: translateX(5px);
-}
-
-.asset-info h4 {
-  font-size: 16px;
-}
-
-.asset-info p {
-  font-size: 12px;
-  color: #888;
-}
-
-.asset-current-price {
-  font-weight: 700;
-  color: #00ff88;
-}
-
-/* Rewards Page */
-.reward-card {
-  background: linear-gradient(135deg, #1a1a2a, #0f0f18);
-  border-radius: 20px;
-  padding: 20px;
-  margin-bottom: 15px;
-  border: 1px solid rgba(0, 255, 136, 0.2);
-}
-
-.promo-code {
-  background: #0a0a0a;
-  padding: 10px;
-  border-radius: 12px;
-  font-family: monospace;
-  letter-spacing: 2px;
-  margin-top: 10px;
-  text-align: center;
-}
-
-/* Help Page */
-.help-card {
+/* Rewards & Help Cards */
+.reward-card, .help-card {
   background: #111118;
   border-radius: 20px;
   padding: 20px;
   margin-bottom: 15px;
-  cursor: pointer;
-  transition: all 0.2s;
 }
-
-.help-card:hover {
-  background: #1a1a28;
+.promo-code {
+  background: #0a0a0a;
+  padding: 10px;
+  border-radius: 12px;
+  text-align: center;
+  font-family: monospace;
+  margin-top: 10px;
 }
 
 /* Profile Page */
-.profile-header {
-  text-align: center;
-  margin-bottom: 30px;
-}
-
 .avatar {
   width: 80px;
   height: 80px;
@@ -344,69 +229,47 @@ body {
   font-weight: bold;
   color: #0a0a0a;
 }
-
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 15px;
   margin: 20px 0;
 }
-
 .stat-card {
   background: #111118;
   border-radius: 16px;
   padding: 15px;
   text-align: center;
 }
+.stat-value { font-size: 24px; font-weight: 700; color: #00ff88; }
 
-.stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #00ff88;
-}
-
-/* Modals */
+/* Modals & Toast */
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
+  top:0; left:0; right:0; bottom:0;
+  background: rgba(0,0,0,0.8);
   backdrop-filter: blur(5px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
 }
-
 .modal-content {
   background: #1a1a2a;
   border-radius: 24px;
   padding: 24px;
   width: 90%;
   max-width: 400px;
-  border: 1px solid rgba(0, 255, 136, 0.3);
 }
-
-/* Forms */
-input, select, textarea {
+input {
   background: #0a0a0a;
   border: 1px solid #2a2a3a;
   border-radius: 12px;
-  padding: 12px 16px;
+  padding: 12px;
   color: white;
-  font-family: inherit;
   width: 100%;
   margin-bottom: 15px;
 }
-
-input:focus {
-  outline: none;
-  border-color: #00ff88;
-}
-
-/* Toast Notifications */
 .toast {
   position: fixed;
   bottom: 80px;
@@ -414,23 +277,12 @@ input:focus {
   right: 20px;
   background: #1a1a2a;
   border-left: 4px solid #00ff88;
-  padding: 14px 20px;
+  padding: 14px;
   border-radius: 12px;
   z-index: 200;
   animation: slideUp 0.3s ease;
 }
-
 @keyframes slideUp {
   from { transform: translateY(100px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
-}
-
-/* Responsive */
-@media (max-width: 480px) {
-  .asset-price {
-    font-size: 32px;
-  }
-  .btn {
-    padding: 10px 20px;
-  }
 }
