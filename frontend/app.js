@@ -104,30 +104,36 @@ async function loadPage(pageName) {
     case 'market': await renderMarket(container); break;
     case 'rewards': renderRewards(container); break;
     case 'help': renderHelp(container); break;
+    case 'profile': await renderProfile(container); break;
     default: await renderTerminal(container);
   }
 }
 
-// ---------- TERMINAL (matches your screenshot) ----------
+// ---------- TERMINAL (exactly like image: USD/SGD, 0-100% scale, timer, Up/Down) ----------
 async function renderTerminal(container) {
   container.innerHTML = `
     <div class="page active">
       <div class="asset-header">
-        <div class="asset-name" id="asset-name">Loading...</div>
-        <div class="asset-price" id="asset-price">0.00</div>
+        <div class="asset-name" id="asset-name">USD/SGD · <span id="asset-change">10%</span></div>
+        <div class="asset-price" id="asset-price">1.27224</div>
       </div>
       <div class="glass-card" style="padding:10px;">
         <select id="asset-selector" style="width:100%; background:#0a0a0a; border:1px solid #2a2a3a; border-radius:12px; padding:12px;"></select>
       </div>
-      <div class="chart-container"><canvas id="price-chart" width="400" height="200"></canvas></div>
+      <div class="chart-container">
+        <canvas id="price-chart" width="400" height="200"></canvas>
+        <div class="chart-scale">
+          <span>0%</span><span>50%</span><span>100%</span>
+        </div>
+      </div>
       <div class="glass-card" style="padding:20px;">
-        <div class="timer-display" id="timer">Select time</div>
-        <div><label>Amount (₹)</label><div class="amount-buttons">
+        <div class="timer-display" id="timer">10 min</div>
+        <div><label>Amount (INR)</label><div class="amount-buttons">
+          <button class="amount-btn" data-amount="70">70</button>
           <button class="amount-btn" data-amount="100">100</button>
           <button class="amount-btn" data-amount="500">500</button>
           <button class="amount-btn" data-amount="1000">1000</button>
-          <button class="amount-btn" data-amount="5000">5000</button>
-        </div><input type="number" id="custom-amount" placeholder="Custom" min="100"></div>
+        </div><input type="number" id="custom-amount" placeholder="Custom" min="70"></div>
         <div><label>Duration</label><div class="time-buttons">
           <button class="time-btn" data-time="10">10s</button>
           <button class="time-btn" data-time="60">1m</button>
@@ -137,6 +143,7 @@ async function renderTerminal(container) {
           <button class="btn btn-up" id="trade-up">UP</button>
           <button class="btn btn-down" id="trade-down">DOWN</button>
         </div>
+        <div class="profit-badge" id="profit-badge">Profit: +INR 7.00</div>
       </div>
     </div>
   `;
@@ -158,7 +165,7 @@ async function renderTerminal(container) {
     };
   }
 
-  let selectedAmount = 100;
+  let selectedAmount = 70;
   let selectedTime = 10;
   document.querySelectorAll('.amount-btn').forEach(btn => {
     btn.onclick = () => {
@@ -170,7 +177,7 @@ async function renderTerminal(container) {
   });
   document.getElementById('custom-amount').oninput = (e) => {
     let val = parseInt(e.target.value);
-    if (val >= 100) selectedAmount = val;
+    if (val >= 70) selectedAmount = val;
     document.querySelectorAll('.amount-btn').forEach(b => b.classList.remove('active'));
   };
   document.querySelectorAll('.time-btn').forEach(btn => {
@@ -178,9 +185,13 @@ async function renderTerminal(container) {
       document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       selectedTime = parseInt(btn.dataset.time);
+      const timerEl = document.getElementById('timer');
+      if (selectedTime === 10) timerEl.innerText = '10 min';
+      else if (selectedTime === 60) timerEl.innerText = '1 hour';
+      else timerEl.innerText = '2 hour';
     };
   });
-  document.querySelector('.time-btn').click();
+  document.querySelector('.time-btn').click(); // default 10s
 
   document.getElementById('trade-up').onclick = () => placeTrade(currentAsset.id, selectedAmount, 'UP', selectedTime);
   document.getElementById('trade-down').onclick = () => placeTrade(currentAsset.id, selectedAmount, 'DOWN', selectedTime);
@@ -196,8 +207,8 @@ async function fetchAssets() {
 
 function updateAssetDisplay() {
   if (currentAsset) {
-    document.getElementById('asset-name').innerText = `${currentAsset.name} (${currentAsset.symbol})`;
-    document.getElementById('asset-price').innerText = `₹${currentAsset.price.toFixed(2)}`;
+    document.getElementById('asset-name').innerHTML = `${currentAsset.symbol || 'USD/SGD'} · <span id="asset-change">${((currentAsset.price - (currentAsset.min_price || 1.27)) / ((currentAsset.max_price || 1.28) - (currentAsset.min_price || 1.27)) * 100).toFixed(0)}%</span>`;
+    document.getElementById('asset-price').innerText = currentAsset.price.toFixed(5);
   }
 }
 
@@ -208,7 +219,7 @@ function initChart(price) {
   priceChart = new Chart(ctx, {
     type: 'line',
     data: { labels: Array(20).fill(''), datasets: [{ data: chartData, borderColor: '#00ff88', backgroundColor: 'rgba(0,255,136,0.1)', fill: true, tension: 0.4, pointRadius: 0 }] },
-    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { display: false }, y: { ticks: { color: '#888' } } } }
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { display: false }, y: { ticks: { color: '#888' }, min: currentAsset?.min_price || price*0.99, max: currentAsset?.max_price || price*1.01 } } }
   });
 }
 
@@ -217,6 +228,10 @@ function updateChart(newPrice) {
   chartData.push(newPrice);
   chartData.shift();
   priceChart.data.datasets[0].data = chartData;
+  if (currentAsset) {
+    priceChart.options.scales.y.min = currentAsset.min_price;
+    priceChart.options.scales.y.max = currentAsset.max_price;
+  }
   priceChart.update();
 }
 
@@ -228,6 +243,8 @@ function startPricePolling(assetId) {
     const updated = data.assets?.find(a => a.id === assetId);
     if (updated && currentAsset) {
       currentAsset.price = updated.price;
+      currentAsset.min_price = updated.min_price;
+      currentAsset.max_price = updated.max_price;
       updateAssetDisplay();
       updateChart(updated.price);
     }
@@ -236,7 +253,7 @@ function startPricePolling(assetId) {
 
 async function placeTrade(assetId, amount, direction, duration) {
   if (!currentUser) { showToast('Please login'); return; }
-  if (amount < 100) { showToast('Minimum ₹100'); return; }
+  if (amount < 70) { showToast('Minimum ₹70'); return; }
   const token = localStorage.getItem('token');
   try {
     const res = await fetch(`${API_URL}/trade/create`, {
@@ -249,6 +266,8 @@ async function placeTrade(assetId, amount, direction, duration) {
       showToast(`Trade placed! ${direction} ₹${amount} for ${duration}s`);
       startCountdown(duration);
       fetchBalance();
+      // Update profit badge (demo)
+      document.getElementById('profit-badge').innerHTML = `Profit: +INR ${(amount * 0.8).toFixed(2)}`;
     } else {
       showToast(data.error || 'Trade failed');
     }
@@ -260,7 +279,8 @@ function startCountdown(sec) {
   let remaining = sec;
   const timerEl = document.getElementById('timer');
   const update = () => {
-    timerEl.textContent = `${remaining}s`;
+    if (remaining >= 60) timerEl.textContent = `${Math.floor(remaining/60)} min ${remaining%60}s`;
+    else timerEl.textContent = `${remaining}s`;
     if (remaining <= 0) { clearInterval(countdownInterval); timerEl.textContent = 'Ready'; fetchBalance(); }
     remaining--;
   };
@@ -287,16 +307,30 @@ async function renderTrades(container) {
   } catch(e) { document.getElementById('trades-list').innerHTML = '<p>Error loading trades</p>'; }
 }
 
-// ---------- MARKET PAGE ----------
+// ---------- MARKET PAGE (Forex + Trading Conditions) ----------
 async function renderMarket(container) {
   container.innerHTML = `<div class="page active"><h2>Market</h2><div id="market-assets">Loading...</div></div>`;
   const assets = await fetchAssets();
-  document.getElementById('market-assets').innerHTML = assets.map(a => `
-    <div class="asset-item" data-id="${a.id}">
-      <div><h4>${a.name}</h4><p>${a.symbol} | Min: ₹${a.min_price} Max: ₹${a.max_price}</p></div>
-      <div class="asset-current-price">₹${a.price.toFixed(2)}</div>
+  document.getElementById('market-assets').innerHTML = `
+    <div class="market-section">
+      <h3>Forex</h3>
+      ${assets.filter(a => a.symbol === 'USD/SGD' || a.symbol.includes('USD')).map(a => `
+        <div class="asset-item" data-id="${a.id}">
+          <div><h4>${a.name}</h4><p>${a.symbol}</p></div>
+          <div class="asset-current-price">₹${a.price.toFixed(2)}</div>
+        </div>
+      `).join('')}
     </div>
-  `).join('');
+    <div class="market-section">
+      <h3>Trading Conditions</h3>
+      ${assets.slice(0,5).map(a => `
+        <div class="asset-item" data-id="${a.id}">
+          <div><h4>${a.name}</h4><p>Min: ₹${a.min_price} Max: ₹${a.max_price}</p></div>
+          <div class="asset-current-price">₹${a.price.toFixed(2)}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
   document.querySelectorAll('.asset-item').forEach(el => {
     el.onclick = () => {
       loadPage('terminal');
@@ -309,37 +343,33 @@ async function renderMarket(container) {
   });
 }
 
-// ---------- REWARDS PAGE (matches image) ----------
+// ---------- REWARDS PAGE (Tasks & Rewards, Leaderboards, Events) ----------
 function renderRewards(container) {
   container.innerHTML = `
     <div class="page active">
       <h2>Rewards</h2>
-      <div class="reward-card"><h3>🎁 Welcome Bonus</h3><p>Use code <strong>WELCOME</strong> on first deposit</p><div class="promo-code">UP TO 100%</div></div>
-      <div class="reward-card"><h3>💰 Special Promo</h3><p>Use code <strong>ONAPA</strong> when depositing USD</p></div>
-      <div class="reward-card"><h3>🏆 Referral Program</h3><p>Invite friends – earn ₹500 each</p><div class="promo-code" id="refCode" style="cursor:pointer;">Copy your link</div></div>
-      <div class="glass-card" style="padding:20px;"><h3>Leaderboard</h3><p>Coming soon...</p></div>
+      <div class="reward-card"><h3>🎁 Tasks & Rewards (2 Available)</h3><p>Use <strong>WELCOME</strong> on first deposit – UP TO 100%</p><div class="promo-code">WELCOME</div></div>
+      <div class="reward-card"><h3>💰 Special Promo</h3><p>Use <strong>ONAPA</strong> when depositing USD</p><div class="promo-code">ONAPA</div></div>
+      <div class="reward-card"><h3>🏆 Leaderboards</h3><p>Best trade • Profit • Total trades</p><div class="promo-code" style="background:#1a1a2a;">Your rank: #42</div></div>
+      <div class="glass-card" style="padding:20px;"><h3>Events</h3><p>No active events right now.<br>Check back periodically.</p></div>
     </div>
   `;
-  document.getElementById('refCode')?.addEventListener('click', () => {
-    navigator.clipboard.writeText(window.location.href + '?ref=' + (currentUser?.id || ''));
-    showToast('Referral link copied!');
-  });
 }
 
-// ---------- HELP PAGE (matches image) ----------
+// ---------- HELP PAGE (Support, Help Center, Education, Tutorials) ----------
 function renderHelp(container) {
   container.innerHTML = `
     <div class="page active">
-      <h2>Help & Support</h2>
+      <h2>Help</h2>
       <div class="help-card" onclick="alert('24/7 Support: support@tradingfast.com')"><i class="fas fa-headset"></i> <strong>Support</strong><br>We're here for you 24/7</div>
-      <div class="help-card" onclick="alert('Visit our Help Center at docs.tradingfast.com')"><i class="fas fa-book"></i> <strong>Help Center</strong><br>Get to know the platform</div>
-      <div class="help-card" onclick="alert('Watch video tutorials on YouTube')"><i class="fas fa-graduation-cap"></i> <strong>Education</strong><br>Expand your knowledge</div>
-      <div class="help-card" onclick="alert('Step-by-step: Choose asset → amount → duration → UP/DOWN')"><i class="fas fa-chart-line"></i> <strong>Trading Tutorials</strong><br>Learn how to open a trade</div>
+      <div class="help-card" onclick="alert('Help Center: docs.tradingfast.com')"><i class="fas fa-book"></i> <strong>Help Center</strong><br>Get to know the platform</div>
+      <div class="help-card" onclick="alert('Education: video courses')"><i class="fas fa-graduation-cap"></i> <strong>Education</strong><br>Expand your knowledge</div>
+      <div class="help-card" onclick="alert('Trading Tutorials: step-by-step guide')"><i class="fas fa-chart-line"></i> <strong>Trading Tutorials</strong><br>Learn how to open a trade</div>
     </div>
   `;
 }
 
-// ---------- PROFILE (Settings like image) ----------
+// ---------- PROFILE (Settings style) ----------
 async function renderProfile(container) {
   const token = localStorage.getItem('token');
   let user = { balance:0, username:'', level:1, xp:0, id:'' };
