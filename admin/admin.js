@@ -15,6 +15,7 @@ let currentAssetsData = [];
 let usersCurrentPage = 1;
 const USERS_PER_PAGE = 10;
 let darkMode = localStorage.getItem('adminDarkMode') === 'true';
+let isInitialized = false; // prevent double initialization
 
 // Helper: show toast message
 function showToast(message, type = 'success') {
@@ -54,7 +55,7 @@ async function fetchWithAuth(url, options = {}) {
 
 // Silent refresh
 async function silentRefresh() {
-    if (!adminToken || currentSection === 'login') return;
+    if (!adminToken || currentSection === 'login' || !document.getElementById('section-content')) return;
     try {
         const container = document.getElementById('section-content');
         if (!container) return;
@@ -73,7 +74,7 @@ function stopAutoRefresh() {
     autoRefreshInterval = null;
 }
 
-// Asset auto-refresh (every 2 seconds) – only when assets section is active
+// Asset auto-refresh
 function startAssetAutoRefresh() {
     if(assetRefreshInterval) clearInterval(assetRefreshInterval);
     if(currentSection === 'assets') {
@@ -93,7 +94,6 @@ async function refreshAssetPricesOnly() {
         const res = await fetchWithAuth(`${API_URL}/admin/assets`);
         const data = await res.json();
         currentAssetsData = data.assets || [];
-        // update DOM prices without full reload
         for(let asset of currentAssetsData) {
             const priceSpan = document.getElementById(`live-price-${asset.id}`);
             if(priceSpan) priceSpan.innerText = asset.price.toFixed(2);
@@ -103,9 +103,14 @@ async function refreshAssetPricesOnly() {
 
 // ======================== LOGIN PAGE (stable, no flicker) ========================
 function showLoginForm(errorMsg = '') {
+    // Clear any intervals
     stopAutoRefresh();
     stopAssetAutoRefresh();
+    isInitialized = false;
+    
     const root = document.getElementById('admin-root');
+    if (!root) return;
+    
     root.innerHTML = `
         <div class="login-container">
             <div class="floating-shapes" id="particles-bg"></div>
@@ -122,51 +127,68 @@ function showLoginForm(errorMsg = '') {
             </div>
         </div>
     `;
-    // Particles effect
-    const containerBg = document.getElementById('particles-bg');
-    for(let i=0;i<45;i++) {
-        const particle = document.createElement('div');
-        particle.style.position = 'absolute';
-        particle.style.width = `${Math.random() * 8 + 2}px`;
-        particle.style.height = particle.style.width;
-        particle.style.background = `rgba(76, 175, 80, ${Math.random() * 0.3})`;
-        particle.style.borderRadius = '50%';
-        particle.style.left = `${Math.random() * 100}%`;
-        particle.style.top = `${Math.random() * 100}%`;
-        particle.style.animation = `floatParticle ${Math.random() * 15 + 8}s infinite linear`;
-        containerBg.appendChild(particle);
-    }
-    const style = document.createElement('style');
-    style.textContent = `@keyframes floatParticle { 0% { transform: translateY(0px) rotate(0deg); opacity:0; } 50% { opacity:0.6; } 100% { transform: translateY(-80px) rotate(360deg); opacity:0; } }`;
-    document.head.appendChild(style);
     
-    document.getElementById('admin-login-btn').onclick = async () => {
-        const username = document.getElementById('admin-username').value.trim();
-        const password = document.getElementById('admin-password').value;
-        if (!username || !password) return showLoginForm('Fill all fields');
-        try {
-            const res = await fetch(`${API_URL}/auth/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
-            });
-            const data = await res.json();
-            if (res.ok && data.user.username === 'admin') {
-                adminToken = data.token;
-                localStorage.setItem('adminToken', adminToken);
-                initAdminPanel();
-            } else {
-                showLoginForm('Invalid admin credentials');
-            }
-        } catch (err) {
-            showLoginForm('Network error – backend unreachable');
+    // Particles effect (simple)
+    const containerBg = document.getElementById('particles-bg');
+    if (containerBg) {
+        for(let i=0;i<45;i++) {
+            const particle = document.createElement('div');
+            particle.style.position = 'absolute';
+            particle.style.width = `${Math.random() * 8 + 2}px`;
+            particle.style.height = particle.style.width;
+            particle.style.background = `rgba(76, 175, 80, ${Math.random() * 0.3})`;
+            particle.style.borderRadius = '50%';
+            particle.style.left = `${Math.random() * 100}%`;
+            particle.style.top = `${Math.random() * 100}%`;
+            particle.style.animation = `floatParticle ${Math.random() * 15 + 8}s infinite linear`;
+            containerBg.appendChild(particle);
         }
-    };
+    }
+    
+    // Add keyframe if not exists
+    if (!document.querySelector('#particle-keyframes')) {
+        const style = document.createElement('style');
+        style.id = 'particle-keyframes';
+        style.textContent = `@keyframes floatParticle { 0% { transform: translateY(0px) rotate(0deg); opacity:0; } 50% { opacity:0.6; } 100% { transform: translateY(-80px) rotate(360deg); opacity:0; } }`;
+        document.head.appendChild(style);
+    }
+    
+    // Login button handler
+    const loginBtn = document.getElementById('admin-login-btn');
+    if (loginBtn) {
+        loginBtn.onclick = async () => {
+            const username = document.getElementById('admin-username').value.trim();
+            const password = document.getElementById('admin-password').value;
+            if (!username || !password) return showLoginForm('Fill all fields');
+            try {
+                const res = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (res.ok && data.user && data.user.username === 'admin') {
+                    adminToken = data.token;
+                    localStorage.setItem('adminToken', adminToken);
+                    initAdminPanel();
+                } else {
+                    showLoginForm('Invalid admin credentials');
+                }
+            } catch (err) {
+                showLoginForm('Network error – backend unreachable');
+            }
+        };
+    }
 }
 
 // ======================== INIT PANEL ========================
 async function initAdminPanel() {
+    if (isInitialized) return;
+    isInitialized = true;
+    
     const root = document.getElementById('admin-root');
+    if (!root) return;
+    
     root.innerHTML = `
         <div class="admin-container" id="adminContainer">
             <aside class="sidebar" id="adminSidebar">
@@ -190,16 +212,23 @@ async function initAdminPanel() {
             </main>
         </div>
     `;
+    
     // Sidebar toggle
     const sidebar = document.getElementById('adminSidebar');
     const toggleBtn = document.getElementById('sidebarToggleBtn');
-    toggleBtn.onclick = () => sidebar.classList.toggle('collapsed');
-    document.getElementById('logout-btn').onclick = () => {
-        localStorage.removeItem('adminToken');
-        if(autoRefreshInterval) clearInterval(autoRefreshInterval);
-        if(assetRefreshInterval) clearInterval(assetRefreshInterval);
-        showLoginForm();
-    };
+    if (toggleBtn) toggleBtn.onclick = () => sidebar.classList.toggle('collapsed');
+    
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.onclick = () => {
+            localStorage.removeItem('adminToken');
+            if(autoRefreshInterval) clearInterval(autoRefreshInterval);
+            if(assetRefreshInterval) clearInterval(assetRefreshInterval);
+            isInitialized = false;
+            showLoginForm();
+        };
+    }
+    
     document.querySelectorAll('.nav-link').forEach(link => {
         link.onclick = () => {
             document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
@@ -207,28 +236,36 @@ async function initAdminPanel() {
             currentSection = link.dataset.section;
             usersCurrentPage = 1;
             loadSection(currentSection, false);
-            // manage asset auto-refresh based on section
             if(currentSection === 'assets') startAssetAutoRefresh();
             else stopAssetAutoRefresh();
         };
     });
+    
     await loadSection('dashboard', false);
-    document.querySelector('.admin-container')?.classList.add('loaded');
+    const container = document.querySelector('.admin-container');
+    if (container) container.classList.add('loaded');
     startAutoRefresh();
     applyDarkMode();
 }
 
+// ======================== LOAD SECTION ========================
 async function loadSection(section, silent = false) {
     const container = document.getElementById('section-content');
+    if(!container) return;
     if(!silent) container.innerHTML = '<div style="text-align:center; padding:60px;"><div class="loader-spinner-light" style="margin:0 auto;"></div></div>';
-    switch(section) {
-        case 'dashboard': await loadDashboard(container, silent); break;
-        case 'users': await loadUsers(container, silent); break;
-        case 'trades': await loadTrades(container, silent); break;
-        case 'deposits': await loadDeposits(container, silent); break;
-        case 'withdrawals': await loadWithdrawals(container, silent); break;
-        case 'assets': await loadAssets(container, silent); break;
-        case 'settings': await loadSettings(container, silent); break;
+    try {
+        switch(section) {
+            case 'dashboard': await loadDashboard(container, silent); break;
+            case 'users': await loadUsers(container, silent); break;
+            case 'trades': await loadTrades(container, silent); break;
+            case 'deposits': await loadDeposits(container, silent); break;
+            case 'withdrawals': await loadWithdrawals(container, silent); break;
+            case 'assets': await loadAssets(container, silent); break;
+            case 'settings': await loadSettings(container, silent); break;
+        }
+    } catch(err) {
+        if(!silent) container.innerHTML = '<div class="error-msg">Error loading section. Please refresh.</div>';
+        showToast('Error loading data', 'error');
     }
 }
 
@@ -252,6 +289,7 @@ async function loadDashboard(container, silent) {
             const d = new Date(); d.setDate(d.getDate()-i); return d.toISOString().slice(0,10);
         }).reverse();
         const dailyProfit = last7Days.map(day => trades.filter(t => t.created_at?.startsWith(day)).reduce((sum, t) => sum + (t.profit || 0), 0));
+        
         container.innerHTML = `
             <div class="stats-grid">
                 <div class="stat-card"><h3>👥 Total Users</h3><div class="stat-number">${users.length}</div></div>
@@ -266,13 +304,15 @@ async function loadDashboard(container, silent) {
                 <tbody>${trades.slice(0,10).map(t => `<tr><td>${t.username||'?'}</td><td>${t.asset_name||t.symbol||'?'}</td><td>₹${t.amount}</td><td>${t.direction}</td><td><span class="badge ${t.result==='win'?'badge-approved':(t.result==='loss'?'badge-rejected':'badge-pending')}">${t.result||'pending'}</span></td><td style="color:${t.profit>0?'#2e7d32':'#c62828'}">${t.profit>0?'+':''}₹${t.profit||0}</td><td>${new Date(t.created_at).toLocaleString()}</td></tr>`).join('')}</tbody>
             </table></div>
         `;
-        const ctx = document.getElementById('profitChart').getContext('2d');
-        if(chartInstance) chartInstance.destroy();
-        chartInstance = new Chart(ctx, {
-            type: 'line',
-            data: { labels: last7Days, datasets: [{ label: 'Daily P&L (₹)', data: dailyProfit, borderColor: '#4CAF50', backgroundColor: 'rgba(76,175,80,0.1)', fill: true, tension: 0.3 }] },
-            options: { responsive: true, maintainAspectRatio: true }
-        });
+        const ctx = document.getElementById('profitChart')?.getContext('2d');
+        if(ctx) {
+            if(chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: { labels: last7Days, datasets: [{ label: 'Daily P&L (₹)', data: dailyProfit, borderColor: '#4CAF50', backgroundColor: 'rgba(76,175,80,0.1)', fill: true, tension: 0.3 }] },
+                options: { responsive: true, maintainAspectRatio: true }
+            });
+        }
         document.getElementById('exportTradesExcelBtn')?.addEventListener('click', () => exportToExcel('trades', trades.slice(0,500)));
     } catch(err) { if(!silent) container.innerHTML = '<div class="error-msg">Error loading dashboard</div>'; showToast('Dashboard error', 'error'); }
 }
@@ -377,7 +417,11 @@ window.deleteUser = async (userId) => {
     showToast('User deleted');
 };
 
-// ========== TRADES, DEPOSITS, WITHDRAWALS (Excel export) ==========
+// ========== TRADES, DEPOSITS, WITHDRAWALS, ASSETS, SETTINGS ==========
+// (Keep all the functions from previous version - they are the same)
+// To save space, I'm including the essential ones, but you already have them.
+// For brevity, I'll include the missing ones here. They are identical to the previous final version.
+
 async function loadTrades(container, silent) {
     try {
         const res = await fetchWithAuth(`${API_URL}/admin/trades`);
@@ -416,7 +460,6 @@ async function loadWithdrawals(container, silent) {
     } catch(err) { if(!silent) container.innerHTML = '<div class="error-msg">Error</div>'; }
 }
 
-// ========== ASSETS (auto-refresh every 2s + manual) ==========
 async function loadAssets(container, silent) {
     try {
         const res = await fetchWithAuth(`${API_URL}/admin/assets`);
@@ -456,7 +499,6 @@ async function loadAssets(container, silent) {
     } catch(err) { if(!silent) container.innerHTML = '<div class="error-msg">Error</div>'; }
 }
 
-// ========== SETTINGS (time windows + dark mode toggle) ==========
 async function loadSettings(container, silent) {
     try {
         const res = await fetchWithAuth(`${API_URL}/admin/settings`);
@@ -474,7 +516,7 @@ async function loadSettings(container, silent) {
         document.getElementById('darkModeToggle').onclick = () => {
             darkMode = !darkMode;
             applyDarkMode();
-            loadSettings(container, silent); // refresh to update button text
+            loadSettings(container, silent);
         };
         document.getElementById('save-settings').onclick = async () => {
             const depositEnabled = document.getElementById('deposit-enabled').value === 'true';
@@ -518,9 +560,18 @@ function exportToExcel(type, data) {
     showToast(`Excel downloaded (${data.length} records)`);
 }
 
-// Start application
-if (adminToken) {
-    initAdminPanel().catch(() => showLoginForm('Session expired. Please login again.'));
+// ======================== START APPLICATION ========================
+// Remove any old preloader timeout that might be lurking
+if (window.removePreloaderTimeout) clearTimeout(window.removePreloaderTimeout);
+// Ensure the preloader element is hidden immediately
+const preloaderElem = document.querySelector('.preloader-minimal');
+if (preloaderElem) preloaderElem.style.display = 'none';
+
+// Start the app
+if (adminToken && adminToken !== 'undefined' && adminToken !== 'null') {
+    initAdminPanel().catch(() => {
+        showLoginForm('Session expired. Please login again.');
+    });
 } else {
     showLoginForm();
 }
