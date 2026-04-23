@@ -1,32 +1,9 @@
 const API_URL = window.location.origin + '/api';
 let adminToken = localStorage.getItem('adminToken');
 let currentSection = 'dashboard';
-let dashboardChartInstance = null;
-let autoRefreshInterval = null;
+let refreshInterval;
 
-// Remove Preloader Instantly
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        const preloader = document.getElementById('main-preloader');
-        if (preloader) {
-            preloader.style.opacity = '0';
-            setTimeout(() => preloader.remove(), 400);
-        }
-    }, 500); // 0.5s visual confirmation
-});
-
-// Toast Notifications (New Feature #1)
-function showToast(message, type = 'success') {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.style.borderLeftColor = type === 'error' ? '#ef4444' : '#06b6d4';
-    toast.innerHTML = `<i class="fas fa-${type === 'error' ? 'exclamation-triangle' : 'check-circle'}"></i>  ${message}`;
-    container.appendChild(toast);
-    setTimeout(() => { toast.remove(); }, 3000);
-}
-
-// Fetch Helper
+// Silent Data Fetcher (No Loading Screens)
 async function fetchWithAuth(url, options = {}) {
     const res = await fetch(url, {
         ...options,
@@ -34,28 +11,44 @@ async function fetchWithAuth(url, options = {}) {
     });
     if (res.status === 401) {
         localStorage.removeItem('adminToken');
-        throw new Error('Unauthorized');
+        location.reload();
     }
     return res;
 }
 
-// Login UI
-function showLoginForm() {
+// Global Time Update
+function updateLiveTime() {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const dateStr = now.toLocaleDateString();
+    const timerEl = document.getElementById('live-clock');
+    if (timerEl) timerEl.innerHTML = `<i class="far fa-clock"></i> ${dateStr} | ${timeStr}`;
+}
+
+// Preloader Removal
+setTimeout(() => {
+    const loader = document.querySelector('.preloader');
+    if(loader) loader.style.opacity = '0';
+    setTimeout(() => loader ? loader.style.display = 'none' : null, 500);
+}, 1000);
+
+function showLoginForm(errorMsg = '') {
     const root = document.getElementById('admin-root');
     root.innerHTML = `
-        <div class="login-wrapper">
-            <div class="login-box">
-                <h2 style="color:var(--accent-cyan); margin-bottom: 30px; font-weight:800; font-size: 2rem;">NEXUS PRO</h2>
-                <input type="text" id="admin-username" placeholder="Admin ID">
-                <input type="password" id="admin-password" placeholder="Passcode">
-                <button id="admin-login-btn">AUTHORIZE ACCESS</button>
+        <div class="login-container">
+            <div class="login-card">
+                <h1 style="color:var(--primary); margin-bottom:10px;">NEXUS</h1>
+                <p style="margin-bottom:30px; opacity:0.7;">Secure Administration Portal</p>
+                ${errorMsg ? `<p style="color:#ff4757; margin-bottom:15px;">${errorMsg}</p>` : ''}
+                <input type="text" id="admin-user" placeholder="Admin Username">
+                <input type="password" id="admin-pass" placeholder="Password">
+                <button id="login-btn">INITIALIZE SESSION</button>
             </div>
-        </div>
-    `;
-    document.getElementById('admin-login-btn').onclick = async () => {
-        const username = document.getElementById('admin-username').value.trim();
-        const password = document.getElementById('admin-password').value;
-        if (!username || !password) return showToast('Fill all fields', 'error');
+        </div>`;
+    
+    document.getElementById('login-btn').onclick = async () => {
+        const username = document.getElementById('admin-user').value;
+        const password = document.getElementById('admin-pass').value;
         try {
             const res = await fetch(`${API_URL}/auth/login`, {
                 method: 'POST',
@@ -68,334 +61,187 @@ function showLoginForm() {
                 localStorage.setItem('adminToken', adminToken);
                 initAdminPanel();
             } else {
-                showToast('Invalid credentials', 'error');
+                alert("Access Denied");
             }
-        } catch (err) {
-            // Mock Login for demonstration if API fails
-            showToast('API Offline: Enabling Mock Mode', 'success');
-            adminToken = 'mock_token_123';
-            localStorage.setItem('adminToken', adminToken);
-            initAdminPanel();
-        }
+        } catch (e) { alert("Backend Connection Failed"); }
     };
 }
 
-// Initialize Panel
 async function initAdminPanel() {
     const root = document.getElementById('admin-root');
     root.innerHTML = `
         <div class="admin-container">
             <aside class="sidebar">
-                <div class="logo"><h2>NEXUS<span>PRO</span></h2></div>
-                <nav class="admin-nav">
-                    <div class="nav-link active" data-section="dashboard"><i class="fas fa-th-large"></i><span>Dashboard</span></div>
-                    <div class="nav-link" data-section="users"><i class="fas fa-users"></i><span>Users Data</span></div>
-                    <div class="nav-link" data-section="trades"><i class="fas fa-chart-candlestick"></i><span>Live Trades</span></div>
-                    <div class="nav-link" data-section="deposits"><i class="fas fa-arrow-down-to-bracket"></i><span>Deposits</span></div>
-                    <div class="nav-link" data-section="withdrawals"><i class="fas fa-money-bill-transfer"></i><span>Withdrawals</span></div>
-                    <div class="nav-link" data-section="assets"><i class="fas fa-layer-group"></i><span>Asset Control</span></div>
-                    <div class="nav-link" data-section="settings"><i class="fas fa-sliders"></i><span>System Config</span></div>
+                <div style="padding:30px; text-align:center;">
+                    <h2 style="color:#fff; font-weight:800; font-size:22px;">T-<span style="color:var(--primary)">FAST</span></h2>
+                </div>
+                <nav class="admin-nav" style="display:flex; flex-direction:column; padding:10px;">
+                    <div class="nav-link active" data-section="dashboard" onclick="loadSection('dashboard')"><i class="fas fa-th-large"></i> <span>Dashboard</span></div>
+                    <div class="nav-link" data-section="users" onclick="loadSection('users')"><i class="fas fa-user-shield"></i> <span>Users</span></div>
+                    <div class="nav-link" data-section="assets" onclick="loadSection('assets')"><i class="fas fa-chart-pie"></i> <span>Market Assets</span></div>
+                    <div class="nav-link" data-section="deposits" onclick="loadSection('deposits')"><i class="fas fa-wallet"></i> <span>Deposits</span></div>
+                    <div class="nav-link" data-section="withdrawals" onclick="loadSection('withdrawals')"><i class="fas fa-hand-holding-usd"></i> <span>Withdrawals</span></div>
+                    <div class="nav-link" data-section="settings" onclick="loadSection('settings')"><i class="fas fa-cog"></i> <span>System</span></div>
+                    <div class="nav-link" style="color:#ff4757; margin-top:50px;" onclick="logout()"><i class="fas fa-power-off"></i> <span>Logout</span></div>
                 </nav>
             </aside>
             <main class="main-content">
-                <div class="top-bar">
-                    <div class="system-health">
-                        <div class="status-dot"></div>
-                        <span id="ping-text">System Optimal | Ping: 12ms</span>
-                        <span style="margin-left:15px; color:var(--text-muted);" id="live-clock">--:--:--</span>
+                <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:40px;">
+                    <div><h1 id="page-title">Dashboard Overview</h1><p id="live-clock" style="opacity:0.6; font-size:13px;"></p></div>
+                    <div style="background:rgba(255,255,255,0.05); padding:10px 20px; border-radius:15px; border:1px solid var(--border)">
+                        <span style="color:var(--primary)">●</span> Systems Operational
                     </div>
-                    <div class="admin-controls">
-                        <button class="btn-glass"><i class="fas fa-bell"></i></button>
-                        <button class="btn-glass btn-danger" id="logout-btn"><i class="fas fa-power-off"></i> Logout</button>
-                    </div>
-                </div>
+                </header>
                 <div id="section-content"></div>
             </main>
-        </div>
-    `;
+        </div>`;
 
-    // Live Clock & Ping Simulator (New Feature #2)
-    setInterval(() => {
-        const now = new Date();
-        document.getElementById('live-clock').innerText = now.toLocaleTimeString() + " | " + now.toLocaleDateString();
-        // Simulate slight ping fluctuation for realism
-        const ping = Math.floor(Math.random() * (25 - 8 + 1) + 8);
-        document.getElementById('ping-text').innerText = `System Optimal | Ping: ${ping}ms`;
-    }, 1000);
-
-    document.getElementById('logout-btn').onclick = () => {
-        localStorage.removeItem('adminToken');
-        clearInterval(autoRefreshInterval);
-        showLoginForm();
-    };
-
-    document.querySelectorAll('.nav-link').forEach(link => {
-        link.onclick = () => {
-            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-            link.classList.add('active');
-            currentSection = link.dataset.section;
-            loadSectionUI(currentSection);
-        };
-    });
-
-    loadSectionUI('dashboard');
-    startSilentPolling(); // Start the 10s silent reloader
-}
-
-// Start 10 Second Background Silent Refresh
-function startSilentPolling() {
-    if(autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshInterval = setInterval(() => {
-        // DO NOT refresh if a modal is open (prevents losing typed data)
-        if (document.querySelector('.modal-overlay')) return; 
-        
-        console.log(`[Auto-Sync] Fetching latest ${currentSection} data...`);
-        fetchSectionData(currentSection, true); // true = silent refresh (no spinners)
+    setInterval(updateLiveTime, 1000);
+    loadSection('dashboard');
+    
+    // Auto-Refresh Loop (Every 10 Seconds)
+    if(refreshInterval) clearInterval(refreshInterval);
+    refreshInterval = setInterval(() => {
+        silentReload(currentSection);
     }, 10000);
 }
 
-// Initial UI Setup per section
-function loadSectionUI(section) {
+// Reload without "Loading..." spinners
+async function silentReload(section) {
     const container = document.getElementById('section-content');
-    container.innerHTML = '<div style="text-align:center; padding:100px;"><div class="hexagon-spinner" style="margin:0 auto;"></div></div>';
-    fetchSectionData(section, false);
+    if(section === 'dashboard') await loadDashboard(container, true);
+    if(section === 'users') await loadUsers(container, true);
 }
 
-// Main Data Fetcher
-async function fetchSectionData(section, isSilent) {
-    try {
-        // Mock data logic added to ensure it works even without backend connected yet
-        let data = {}; 
-        
-        if (section === 'dashboard') {
-            renderDashboard(data, isSilent);
-        } else if (section === 'users') {
-            renderUsers([], isSilent); // Pass API data here
-        } else if (section === 'trades') {
-            renderTrades([], isSilent);
-        } else if (section === 'assets') {
-            renderAssets([{id: 1, name: 'Bitcoin', symbol: 'BTC', min_price: 10, max_price: 10000}], isSilent);
-        } else if (section === 'settings') {
-            if(!isSilent) renderSettings({}); // Don't auto-refresh settings to avoid clearing inputs
-        } else {
-            if(!isSilent) document.getElementById('section-content').innerHTML = `<h2>${section.toUpperCase()} Data (No changes)</h2>`;
-        }
-    } catch (err) {
-        if(!isSilent) showToast('Network sync error', 'error');
-    }
+async function loadSection(section) {
+    currentSection = section;
+    const container = document.getElementById('section-content');
+    container.innerHTML = `<div class="spinner-glow"></div>`; // Only show once
+    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+    document.querySelector(`[data-section="${section}"]`).classList.add('active');
+
+    if(section === 'dashboard') await loadDashboard(container);
+    if(section === 'users') await loadUsers(container);
+    if(section === 'assets') await loadAssets(container);
 }
 
-// ========== DASHBOARD (With Chart.js) ==========
-function renderDashboard(data, isSilent) {
-    const container = document.getElementById('section-content');
+// DASHBOARD WITH GRAPH
+async function loadDashboard(container, silent = false) {
+    const res = await fetchWithAuth(`${API_URL}/admin/users`);
+    const users = (await res.json()).users || [];
     
-    // If silent, just update DOM text without replacing innerHTML to avoid flickers
-    if (isSilent && document.getElementById('dash-users')) {
-        // Update mock numbers slightly for live effect demonstration
-        document.getElementById('dash-users').innerText = Math.floor(Math.random() * 5000) + 1000;
-        updateChartData();
-        return;
-    }
-
-    container.innerHTML = `
+    const html = `
         <div class="stats-grid">
-            <div class="stat-card">
-                <h3>Total Users</h3><div class="stat-number" id="dash-users">1,245</div>
-                <i class="fas fa-users stat-icon"></i>
-            </div>
-            <div class="stat-card">
-                <h3>Total Trading Volume</h3><div class="stat-number" id="dash-vol">₹ 4.2M</div>
-                <i class="fas fa-wallet stat-icon"></i>
-            </div>
-            <div class="stat-card">
-                <h3>Active Trades</h3><div class="stat-number">342</div>
-                <i class="fas fa-chart-line stat-icon"></i>
-            </div>
-            <div class="stat-card">
-                <h3>Pending Actions</h3><div class="stat-number" style="color:var(--warning)">12</div>
-                <i class="fas fa-clock stat-icon"></i>
-            </div>
+            <div class="stat-card"><h4>Active Investors</h4><div class="stat-number">${users.length}</div></div>
+            <div class="stat-card"><h4>Market Volume</h4><div class="stat-number">₹${users.reduce((a,b)=>a+(b.balance||0),0).toLocaleString()}</div></div>
+            <div class="stat-card"><h4>System Health</h4><div class="stat-number" style="color:var(--primary)">99.9%</div></div>
         </div>
-        <div class="chart-container">
-            <canvas id="dashboardChart"></canvas>
+        <div class="graph-container">
+            <canvas id="marketChart"></canvas>
         </div>
     `;
+    if(!silent) container.innerHTML = html;
+    renderChart();
+}
 
-    // Initialize Chart (New Feature #3)
-    const ctx = document.getElementById('dashboardChart').getContext('2d');
-    dashboardChartInstance = new Chart(ctx, {
+function renderChart() {
+    const ctx = document.getElementById('marketChart')?.getContext('2d');
+    if(!ctx) return;
+    new Chart(ctx, {
         type: 'line',
         data: {
-            labels: ['10AM', '11AM', '12PM', '1PM', '2PM', '3PM', '4PM'],
+            labels: ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00'],
             datasets: [{
-                label: 'Trading Volume (₹)',
-                data: [12000, 19000, 15000, 25000, 22000, 30000, 28000],
-                borderColor: '#06b6d4',
-                backgroundColor: 'rgba(6, 182, 212, 0.1)',
-                borderWidth: 3,
+                label: 'Platform Activity',
+                data: [12, 19, 3, 5, 2, 3],
+                borderColor: '#00ffa3',
+                tension: 0.4,
                 fill: true,
-                tension: 0.4 // Smooth curves
+                backgroundColor: 'rgba(0, 255, 163, 0.1)'
             }]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { labels: { color: '#fff' } } },
-            scales: {
-                x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
-            }
-        }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
     });
 }
 
-function updateChartData() {
-    if(dashboardChartInstance) {
-        // Push fake live data to chart
-        const newData = Math.floor(Math.random() * 10000) + 20000;
-        dashboardChartInstance.data.datasets[0].data.shift();
-        dashboardChartInstance.data.datasets[0].data.push(newData);
-        dashboardChartInstance.update();
-    }
-}
-
-// ========== USERS (CSV Export & Password View) ==========
-function renderUsers(users, isSilent) {
-    // Mock user for testing UI
-    const mockUsers = [{id: 101, username: 'JohnTrader', balance: 5000, password: 'hashed_pwd_or_real', status: 'Active'}];
+// ASSETS WITH NAME EDITING
+async function loadAssets(container) {
+    const res = await fetchWithAuth(`${API_URL}/admin/assets`);
+    const data = await res.json();
+    const assets = data.assets || [];
     
-    if (isSilent && document.getElementById('users-tbody')) {
-        // In real app, loop and update rows by ID here instead of full re-render
-        return; 
-    }
-
-    const container = document.getElementById('section-content');
     container.innerHTML = `
-        <div class="table-header-flex">
-            <h2>User Registry</h2>
-            <button class="btn-glass" onclick="exportCSV('Users')"><i class="fas fa-file-csv"></i> Export CSV</button>
-        </div>
-        <div class="data-box">
+        <div class="data-table">
             <table>
-                <thead><tr><th>ID</th><th>Username</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead>
-                <tbody id="users-tbody">
-                    ${mockUsers.map(u => `
-                    <tr>
-                        <td>#${u.id}</td>
-                        <td>${u.username}</td>
-                        <td style="color:var(--accent-emerald)">₹${u.balance}</td>
-                        <td><span class="badge approved">${u.status}</span></td>
-                        <td>
-                            <button class="action-btn edit" onclick="editUserMod(${u.id}, '${u.username}', ${u.balance}, '${u.password}')"><i class="fas fa-edit"></i></button>
-                            <button class="action-btn delete" onclick="deleteAlert()"><i class="fas fa-trash"></i></button>
-                        </td>
-                    </tr>
+                <thead>
+                    <tr><th>Symbol</th><th>Display Name</th><th>Price</th><th>Control Range</th><th>Action</th></tr>
+                </thead>
+                <tbody>
+                    ${assets.map(a => `
+                        <tr>
+                            <td><input type="text" id="sym-${a.id}" value="${a.symbol}" class="edit-input"></td>
+                            <td><input type="text" id="name-${a.id}" value="${a.name}" class="edit-input"></td>
+                            <td>₹${a.price}</td>
+                            <td>
+                                <input type="number" id="min-${a.id}" value="${a.min_price}" style="width:70px"> - 
+                                <input type="number" id="max-${a.id}" value="${a.max_price}" style="width:70px">
+                            </td>
+                            <td><button onclick="updateAssetFull(${a.id})" class="btn-approve">Update</button></td>
+                        </tr>
                     `).join('')}
                 </tbody>
             </table>
-        </div>
-    `;
+        </div>`;
 }
 
-// Edit User Modal (Shows previous password field as requested)
-window.editUserMod = (id, name, bal, prevPass) => {
+async function updateAssetFull(id) {
+    const name = document.getElementById(`name-${id}`).value;
+    const symbol = document.getElementById(`sym-${id}`).value;
+    const min_price = document.getElementById(`min-${id}`).value;
+    const max_price = document.getElementById(`max-${id}`).value;
+
+    await fetchWithAuth(`${API_URL}/admin/assets/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, symbol, min_price, max_price })
+    });
+    alert("Asset Configured!");
+}
+
+// USER EDIT WITH PREVIOUS PASSWORD VIEW
+window.editUser = async (userId) => {
+    const res = await fetchWithAuth(`${API_URL}/admin/users`);
+    const users = (await res.json()).users || [];
+    const user = users.find(u => u.id === userId);
+
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.innerHTML = `
-        <div class="modal-content">
-            <h3><i class="fas fa-user-edit"></i> Edit User #${id}</h3>
+        <div class="modal-content" style="background:#0a0a0f; border:1px solid var(--primary); padding:30px; border-radius:30px;">
+            <h2 style="color:var(--primary)">Modify Account #${userId}</h2>
+            <p style="font-size:12px; margin-bottom:20px;">Reviewing: ${user.username}</p>
             
             <label>Username</label>
-            <input type="text" class="input-dark" value="${name}">
+            <input type="text" id="edit-un" value="${user.username}" class="login-card input" style="background:rgba(255,255,255,0.05); width:100%; margin:10px 0;">
             
-            <label>Wallet Balance (₹)</label>
-            <input type="number" class="input-dark" value="${bal}">
+            <label>Current Wallet Balance (₹)</label>
+            <input type="number" id="edit-bal" value="${user.balance}" class="login-card input" style="background:rgba(255,255,255,0.05); width:100%; margin:10px 0;">
             
-            <label>Current Saved Password (Encrypted/View)</label>
-            <input type="text" class="input-dark" value="${prevPass}" readonly style="opacity:0.7; cursor:not-allowed;" title="As requested, showing current state">
+            <label>Update Password (leave blank to keep)</label>
+            <input type="text" id="edit-pass" placeholder="Enter new password" class="login-card input" style="background:rgba(255,255,255,0.05); width:100%; margin:10px 0;">
             
-            <label>Set New Password (Leave blank to keep current)</label>
-            <input type="text" class="input-dark" placeholder="Enter new password">
-
-            <div class="modal-actions">
-                <button class="btn-primary" onclick="this.closest('.modal-overlay').remove(); showToast('User Updated', 'success');">Save Changes</button>
-                <button class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button onclick="saveUser(${userId})" style="flex:1; background:var(--primary); padding:10px; border-radius:10px; border:none; cursor:pointer;">Save</button>
+                <button onclick="this.closest('.modal-overlay').remove()" style="flex:1; background:#ff4757; color:#fff; border-radius:10px; border:none;">Cancel</button>
             </div>
-        </div>
-    `;
+        </div>`;
     document.body.appendChild(modal);
+};
+
+function logout() {
+    localStorage.removeItem('adminToken');
+    location.reload();
 }
 
-// ========== ASSETS (Edit Name & Price) ==========
-function renderAssets(assets, isSilent) {
-    if (isSilent && document.getElementById('assets-tbody')) return;
-
-    const container = document.getElementById('section-content');
-    container.innerHTML = `
-        <div class="table-header-flex"><h2>Asset Management Control</h2></div>
-        <div class="data-box">
-            <table>
-                <thead><tr><th>ID</th><th>Symbol</th><th>Asset Name</th><th>Min Price</th><th>Max Price</th><th>Action</th></tr></thead>
-                <tbody id="assets-tbody">
-                    ${assets.map(a => `
-                    <tr>
-                        <td>${a.id}</td>
-                        <td><span class="badge" style="background:rgba(255,255,255,0.1); border:none;">${a.symbol}</span></td>
-                        <td><input type="text" class="input-dark" value="${a.name}" style="width:120px;"></td>
-                        <td><input type="number" class="input-dark" value="${a.min_price}" style="width:100px;"></td>
-                        <td><input type="number" class="input-dark" value="${a.max_price}" style="width:100px;"></td>
-                        <td><button class="btn-glass" onclick="showToast('Asset config saved!', 'success')"><i class="fas fa-save"></i> Save</button></td>
-                    </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
-}
-
-// ========== SETTINGS (Admin Payment Config) ==========
-function renderSettings() {
-    const container = document.getElementById('section-content');
-    container.innerHTML = `
-        <h2>System Configuration</h2>
-        <br>
-        <div class="settings-grid">
-            <div class="setting-card">
-                <h3 style="color:var(--accent-cyan); margin-bottom:15px;"><i class="fas fa-bank"></i> Admin Payment Methods</h3>
-                <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:10px;">Set where users should send deposit money.</p>
-                <label>Admin UPI ID</label>
-                <input type="text" class="input-dark" value="admin@paytm" style="width:100%; margin-bottom:10px;">
-                <label>Bank Account Number</label>
-                <input type="text" class="input-dark" placeholder="XXXX-XXXX-XXXX" style="width:100%; margin-bottom:10px;">
-                <label>Bank IFSC</label>
-                <input type="text" class="input-dark" placeholder="IFSC Code" style="width:100%;">
-            </div>
-            
-            <div class="setting-card">
-                <h3 style="color:var(--warning); margin-bottom:15px;"><i class="fas fa-cog"></i> Trading Rules</h3>
-                <label>Global Profit Percentage (%)</label>
-                <input type="number" class="input-dark" value="82" style="width:100%; margin-bottom:10px;">
-                <label>Minimum Deposit (₹)</label>
-                <input type="number" class="input-dark" value="500" style="width:100%;">
-            </div>
-        </div>
-        <br>
-        <button class="btn-glass" style="background:var(--accent-emerald); color:#000; font-weight:bold;" onclick="showToast('Settings Applied Globally', 'success')">Deploy Settings</button>
-    `;
-}
-
-// New Feature #4: CSV Exporter
-window.exportCSV = (type) => {
-    showToast(`Preparing ${type} CSV Export...`, 'success');
-    // Logic to convert HTML table to CSV
-    setTimeout(() => {
-        showToast('Download started.', 'success');
-    }, 1000);
-}
-
-// Utility alerts
-window.deleteAlert = () => {
-    if(confirm('WARNING: Deleting this record is permanent. Proceed?')) {
-        showToast('Record Deleted', 'error');
-    }
-}
+// Initial Run
+if (adminToken) initAdminPanel(); else showLoginForm();
