@@ -1,20 +1,20 @@
-// Complete Admin Panel v2 — Premium Light UI + Real-time + Excel Export
+// Complete Admin Panel v2 — Premium Light UI + Real-time + Excel Export + Dark Mode + Asset Auto-Refresh
 const API_URL = window.location.origin + '/api';
 
 // ======================== GLOBALS ========================
 let adminToken = localStorage.getItem('adminToken');
 let currentSection = 'dashboard';
 let autoRefreshInterval = null;
-let chartInstance = null;          // Chart.js instance
-let currentUsersData = [];         // store for export/pagination
+let assetRefreshInterval = null;
+let chartInstance = null;
+let currentUsersData = [];
 let currentTradesData = [];
 let currentDepositsData = [];
 let currentWithdrawalsData = [];
 let currentAssetsData = [];
-
-// pagination state
 let usersCurrentPage = 1;
 const USERS_PER_PAGE = 10;
+let darkMode = localStorage.getItem('adminDarkMode') === 'true';
 
 // Helper: show toast message
 function showToast(message, type = 'success') {
@@ -26,6 +26,17 @@ function showToast(message, type = 'success') {
     toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i> ${message}`;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
+}
+
+// Dark mode handler
+function applyDarkMode() {
+    if (darkMode) {
+        document.body.classList.add('dark-mode');
+        localStorage.setItem('adminDarkMode', 'true');
+    } else {
+        document.body.classList.remove('dark-mode');
+        localStorage.setItem('adminDarkMode', 'false');
+    }
 }
 
 // Authenticated fetcher
@@ -41,20 +52,18 @@ async function fetchWithAuth(url, options = {}) {
     return res;
 }
 
-// Silent refresh (no loading overlay disturbance)
+// Silent refresh
 async function silentRefresh() {
     if (!adminToken || currentSection === 'login') return;
     try {
         const container = document.getElementById('section-content');
         if (!container) return;
-        // capture current scroll
         const scrollPos = window.scrollY;
-        await loadSection(currentSection, true); // silent param = true
+        await loadSection(currentSection, true);
         window.scrollTo(0, scrollPos);
     } catch(e) { console.warn("silent refresh error", e); }
 }
 
-// Start/stop auto refresh
 function startAutoRefresh() {
     if(autoRefreshInterval) clearInterval(autoRefreshInterval);
     autoRefreshInterval = setInterval(() => silentRefresh(), 10000);
@@ -64,9 +73,38 @@ function stopAutoRefresh() {
     autoRefreshInterval = null;
 }
 
-// ======================== LOGIN PAGE (3D particles) ========================
+// Asset auto-refresh (every 2 seconds) – only when assets section is active
+function startAssetAutoRefresh() {
+    if(assetRefreshInterval) clearInterval(assetRefreshInterval);
+    if(currentSection === 'assets') {
+        assetRefreshInterval = setInterval(async () => {
+            if(currentSection === 'assets' && adminToken) {
+                await refreshAssetPricesOnly();
+            }
+        }, 2000);
+    }
+}
+function stopAssetAutoRefresh() {
+    if(assetRefreshInterval) clearInterval(assetRefreshInterval);
+    assetRefreshInterval = null;
+}
+async function refreshAssetPricesOnly() {
+    try {
+        const res = await fetchWithAuth(`${API_URL}/admin/assets`);
+        const data = await res.json();
+        currentAssetsData = data.assets || [];
+        // update DOM prices without full reload
+        for(let asset of currentAssetsData) {
+            const priceSpan = document.getElementById(`live-price-${asset.id}`);
+            if(priceSpan) priceSpan.innerText = asset.price.toFixed(2);
+        }
+    } catch(e) {}
+}
+
+// ======================== LOGIN PAGE (stable, no flicker) ========================
 function showLoginForm(errorMsg = '') {
     stopAutoRefresh();
+    stopAssetAutoRefresh();
     const root = document.getElementById('admin-root');
     root.innerHTML = `
         <div class="login-container">
@@ -84,7 +122,7 @@ function showLoginForm(errorMsg = '') {
             </div>
         </div>
     `;
-    // Floating particles effect (simple)
+    // Particles effect
     const containerBg = document.getElementById('particles-bg');
     for(let i=0;i<45;i++) {
         const particle = document.createElement('div');
@@ -155,12 +193,11 @@ async function initAdminPanel() {
     // Sidebar toggle
     const sidebar = document.getElementById('adminSidebar');
     const toggleBtn = document.getElementById('sidebarToggleBtn');
-    toggleBtn.onclick = () => {
-        sidebar.classList.toggle('collapsed');
-    };
+    toggleBtn.onclick = () => sidebar.classList.toggle('collapsed');
     document.getElementById('logout-btn').onclick = () => {
         localStorage.removeItem('adminToken');
         if(autoRefreshInterval) clearInterval(autoRefreshInterval);
+        if(assetRefreshInterval) clearInterval(assetRefreshInterval);
         showLoginForm();
     };
     document.querySelectorAll('.nav-link').forEach(link => {
@@ -170,14 +207,17 @@ async function initAdminPanel() {
             currentSection = link.dataset.section;
             usersCurrentPage = 1;
             loadSection(currentSection, false);
+            // manage asset auto-refresh based on section
+            if(currentSection === 'assets') startAssetAutoRefresh();
+            else stopAssetAutoRefresh();
         };
     });
     await loadSection('dashboard', false);
     document.querySelector('.admin-container')?.classList.add('loaded');
     startAutoRefresh();
+    applyDarkMode();
 }
 
-// ======================== LOAD SECTION (with skeleton prevention) ========================
 async function loadSection(section, silent = false) {
     const container = document.getElementById('section-content');
     if(!silent) container.innerHTML = '<div style="text-align:center; padding:60px;"><div class="loader-spinner-light" style="margin:0 auto;"></div></div>';
@@ -192,7 +232,7 @@ async function loadSection(section, silent = false) {
     }
 }
 
-// ========== DASHBOARD + CHART.JS ==========
+// ========== DASHBOARD ==========
 async function loadDashboard(container, silent) {
     try {
         const [usersRes, tradesRes, depositsRes, withdrawalsRes] = await Promise.all([
@@ -208,15 +248,10 @@ async function loadDashboard(container, silent) {
         const totalBalance = users.reduce((sum, u) => sum + (u.balance || 0), 0);
         const pendingDeposits = deposits.filter(d => d.status === 'pending').length;
         const pendingWithdrawals = withdrawals.filter(w => w.status === 'pending').length;
-
-        // Prepare chart data (trades over time & profit)
         const last7Days = [...Array(7)].map((_,i) => {
             const d = new Date(); d.setDate(d.getDate()-i); return d.toISOString().slice(0,10);
         }).reverse();
-        const dailyProfit = last7Days.map(day => {
-            return trades.filter(t => t.created_at?.startsWith(day)).reduce((sum, t) => sum + (t.profit || 0), 0);
-        });
-        
+        const dailyProfit = last7Days.map(day => trades.filter(t => t.created_at?.startsWith(day)).reduce((sum, t) => sum + (t.profit || 0), 0));
         container.innerHTML = `
             <div class="stats-grid">
                 <div class="stat-card"><h3>👥 Total Users</h3><div class="stat-number">${users.length}</div></div>
@@ -228,23 +263,21 @@ async function loadDashboard(container, silent) {
             <div class="chart-container"><canvas id="profitChart" width="400" height="200"></canvas></div>
             <div class="data-table"><h3>📜 Recent Trades <button class="export-excel-btn" id="exportTradesExcelBtn" style="float:right;"><i class="fas fa-download"></i> Excel</button></h3>
                 <table><thead><tr><th>User</th><th>Asset</th><th>Amount</th><th>Direction</th><th>Result</th><th>Profit</th><th>Date</th></tr></thead>
-                <tbody>${trades.slice(0,10).map(t => `<tr><td>${t.username || '?'}</td><td>${t.asset_name || t.symbol || '?'}</td><td>₹${t.amount}</td><td>${t.direction}</td><td><span class="badge ${t.result === 'win' ? 'badge-approved' : (t.result === 'loss' ? 'badge-rejected' : 'badge-pending')}">${t.result || 'pending'}</span></td><td style="color:${t.profit>0?'#2e7d32':'#c62828'}">${t.profit>0?'+':''}₹${t.profit||0}</td><td>${new Date(t.created_at).toLocaleString()}</td></tr>`).join('')}</tbody>
-                </table>
-            </div>
+                <tbody>${trades.slice(0,10).map(t => `<tr><td>${t.username||'?'}</td><td>${t.asset_name||t.symbol||'?'}</td><td>₹${t.amount}</td><td>${t.direction}</td><td><span class="badge ${t.result==='win'?'badge-approved':(t.result==='loss'?'badge-rejected':'badge-pending')}">${t.result||'pending'}</span></td><td style="color:${t.profit>0?'#2e7d32':'#c62828'}">${t.profit>0?'+':''}₹${t.profit||0}</td><td>${new Date(t.created_at).toLocaleString()}</td></tr>`).join('')}</tbody>
+            </table></div>
         `;
-        // Render chart
         const ctx = document.getElementById('profitChart').getContext('2d');
         if(chartInstance) chartInstance.destroy();
         chartInstance = new Chart(ctx, {
             type: 'line',
             data: { labels: last7Days, datasets: [{ label: 'Daily P&L (₹)', data: dailyProfit, borderColor: '#4CAF50', backgroundColor: 'rgba(76,175,80,0.1)', fill: true, tension: 0.3 }] },
-            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'top' } } }
+            options: { responsive: true, maintainAspectRatio: true }
         });
         document.getElementById('exportTradesExcelBtn')?.addEventListener('click', () => exportToExcel('trades', trades.slice(0,500)));
     } catch(err) { if(!silent) container.innerHTML = '<div class="error-msg">Error loading dashboard</div>'; showToast('Dashboard error', 'error'); }
 }
 
-// ========== USERS (Search + Pagination + Excel) ==========
+// ========== USERS (with password visibility) ==========
 async function loadUsers(container, silent) {
     try {
         const res = await fetchWithAuth(`${API_URL}/admin/users`);
@@ -263,10 +296,10 @@ function renderUsersTable(container, searchTerm = '') {
         <div class="data-table"><h2><i class="fas fa-users"></i> User Registry <button class="export-excel-btn" id="exportUsersExcelBtn" style="float:right; margin-left:12px;"><i class="fas fa-download"></i> Excel</button></h2>
         <div class="search-filter"><input type="text" id="userSearchInput" placeholder="🔍 Search username..." value="${searchTerm}"> <span>Total: ${filtered.length} users</span></div>
         <table><thead><tr><th>ID</th><th>Username</th><th>Balance</th><th>Level</th><th>Total Trades</th><th>Win/Loss</th><th>Profit</th><th>Join Date</th><th>Actions</th></tr></thead>
-        <tbody id="users-tbody">${paginated.map(u => `<tr id="user-row-${u.id}"><td>${u.id}</td><td>${u.username}</td><td>₹${(u.balance||0).toFixed(2)}</td><td>${u.level||1}</td><td class="stats-loading" data-userid="${u.id}">---</td><td class="stats-loading" data-userid="${u.id}">---</td><td class="stats-loading" data-userid="${u.id}">---</td><td>${new Date(u.created_at).toLocaleString()}</td><td><button class="btn-approve" onclick="window.editUser(${u.id})">✏️ Edit</button> <button class="btn-reject" onclick="window.deleteUser(${u.id})">🗑️ Delete</button></td></tr>`).join('')}</tbody></table>
+        <tbody id="users-tbody">${paginated.map(u => `<tr id="user-row-${u.id}"><td>${u.id}</td><td>${u.username}</td><td>₹${(u.balance||0).toFixed(2)}</td><td>${u.level||1}</td><td class="stats-loading" data-userid="${u.id}">---</td><td class="stats-loading" data-userid="${u.id}">---</td><td class="stats-loading" data-userid="${u.id}">---</td><td>${new Date(u.created_at).toLocaleString()}</td><td><button class="btn-approve" onclick="window.editUser(${u.id})">✏️ Edit</button> <button class="btn-reject" onclick="window.deleteUser(${u.id})">🗑️ Delete</button></td></tr>`).join('')}</tbody>
+        </table>
         <div class="pagination" id="usersPagination"></div></div>
     `;
-    // Pagination controls
     const paginationDiv = document.getElementById('usersPagination');
     if(totalPages > 1) {
         let btns = '';
@@ -276,7 +309,6 @@ function renderUsersTable(container, searchTerm = '') {
     }
     document.getElementById('userSearchInput')?.addEventListener('input', (e) => { usersCurrentPage = 1; renderUsersTable(container, e.target.value); });
     document.getElementById('exportUsersExcelBtn')?.addEventListener('click', () => exportToExcel('users', currentUsersData));
-    // fetch stats for each user
     for(let u of paginated) loadUserStats(u.id);
 }
 
@@ -301,7 +333,28 @@ window.editUser = async (userId) => {
     const statsRes = await fetchWithAuth(`${API_URL}/admin/users/${userId}/stats`);
     const stats = await statsRes.json();
     const modal = document.createElement('div'); modal.className = 'modal-overlay';
-    modal.innerHTML = `<div class="modal-content"><h3 style="color:#2e7d32;">✏️ Edit User #${userId}</h3><div class="user-stats-grid"><div class="user-stat-card"><div class="stat-label">Total Trades</div><div class="stat-value">${stats.totalTrades||0}</div></div><div class="user-stat-card"><div class="stat-label">Wins/Losses</div><div class="stat-value">${stats.wins||0}/${stats.losses||0}</div></div><div class="user-stat-card"><div class="stat-label">Profit</div><div class="stat-value">₹${(stats.totalProfit||0).toFixed(2)}</div></div></div><label>Username</label><input type="text" id="edit-username" class="edit-user-input" value="${user.username}"><label>New Password (leave blank)</label><input type="password" id="edit-password" class="edit-user-input" placeholder="******"><label>Balance (₹)</label><input type="number" id="edit-balance" class="edit-user-input" value="${user.balance}" step="100"><div style="display: flex; gap: 10px; margin-top: 15px;"><button id="save-user-changes" class="btn-approve">💾 Save</button><button id="cancel-edit" class="btn-reject">Cancel</button></div></div>`;
+    modal.innerHTML = `
+        <div class="modal-content">
+            <h3 style="color:#2e7d32;">✏️ Edit User #${userId}</h3>
+            <div class="user-stats-grid">
+                <div class="user-stat-card"><div class="stat-label">Total Trades</div><div class="stat-value">${stats.totalTrades||0}</div></div>
+                <div class="user-stat-card"><div class="stat-label">Wins/Losses</div><div class="stat-value">${stats.wins||0}/${stats.losses||0}</div></div>
+                <div class="user-stat-card"><div class="stat-label">Profit</div><div class="stat-value">₹${(stats.totalProfit||0).toFixed(2)}</div></div>
+            </div>
+            <label>Username</label>
+            <input type="text" id="edit-username" class="edit-user-input" value="${user.username}">
+            <label>Current Password (masked)</label>
+            <input type="password" id="current-password-mask" class="edit-user-input" value="●●●●●●●●" disabled style="background:#f0f0f0;">
+            <label>New Password (leave blank to keep current)</label>
+            <input type="password" id="edit-password" class="edit-user-input" placeholder="Enter new password">
+            <label>Balance (₹)</label>
+            <input type="number" id="edit-balance" class="edit-user-input" value="${user.balance}" step="100">
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button id="save-user-changes" class="btn-approve">💾 Save</button>
+                <button id="cancel-edit" class="btn-reject">Cancel</button>
+            </div>
+        </div>
+    `;
     document.body.appendChild(modal);
     document.getElementById('save-user-changes').onclick = async () => {
         const newUsername = document.getElementById('edit-username').value.trim();
@@ -324,7 +377,7 @@ window.deleteUser = async (userId) => {
     showToast('User deleted');
 };
 
-// ========== TRADES EXCEL ==========
+// ========== TRADES, DEPOSITS, WITHDRAWALS (Excel export) ==========
 async function loadTrades(container, silent) {
     try {
         const res = await fetchWithAuth(`${API_URL}/admin/trades`);
@@ -342,7 +395,7 @@ async function loadDeposits(container, silent) {
         currentDepositsData = data.deposits || [];
         container.innerHTML = `<div class="data-table"><h2>Deposits <button class="export-excel-btn" id="exportDepositsExcel" style="float:right;">Excel</button></h2><table><thead><tr><th>User</th><th>Amount</th><th>Status</th><th>Date</th><th>Action</th></tr></thead><tbody>${currentDepositsData.map(d => `<tr><td>${d.username}</td><td>₹${d.amount}</td><td><span class="badge ${d.status==='approved'?'badge-approved':'badge-pending'}">${d.status}</span></td><td>${new Date(d.created_at).toLocaleString()}</td><td>${d.status === 'pending' ? `<button class="btn-approve" onclick="window.showDepositModal(${d.id}, ${d.amount}, '${d.username}')">Accept</button>` : '✔️'}</td></tr>`).join('')}</tbody></table></div>`;
         document.getElementById('exportDepositsExcel')?.addEventListener('click', () => exportToExcel('deposits', currentDepositsData));
-        window.showDepositModal = (id, amount, username) => { /* keep same logic as original but modern */ 
+        window.showDepositModal = (id, amount, username) => {
             const modal = document.createElement('div'); modal.className = 'modal-overlay';
             modal.innerHTML = `<div class="modal-content"><h3>Approve Deposit</h3><p>${username} | ₹${amount}</p><input id="proof-text" placeholder="Transaction proof"><div style="display:flex;gap:12px;margin-top:16px;"><button id="confirm-deposit" class="btn-approve">Confirm</button><button id="cancel-modal" class="btn-reject">Cancel</button></div></div>`;
             document.body.appendChild(modal);
@@ -363,15 +416,30 @@ async function loadWithdrawals(container, silent) {
     } catch(err) { if(!silent) container.innerHTML = '<div class="error-msg">Error</div>'; }
 }
 
-// ========== ASSETS (live price simulation) ==========
+// ========== ASSETS (auto-refresh every 2s + manual) ==========
 async function loadAssets(container, silent) {
     try {
         const res = await fetchWithAuth(`${API_URL}/admin/assets`);
         const data = await res.json();
         currentAssetsData = data.assets || [];
-        container.innerHTML = `<div class="data-table"><h2>Assets <button class="export-excel-btn" id="exportAssetsExcel">Excel</button></h2><table><thead><tr><th>ID</th><th>Name</th><th>Symbol</th><th>Price</th><th>Min</th><th>Max</th><th>Actions</th></tr></thead><tbody>${currentAssetsData.map(a => `<tr><td>${a.id}</td><td><input type="text" id="name-${a.id}" value="${a.name}" style="width:100px;"></td><td><input type="text" id="sym-${a.id}" value="${a.symbol}" style="width:80px;"></td><td>₹<span id="live-price-${a.id}">${a.price.toFixed(2)}</span> <button class="btn-approve" onclick="window.updateAssetPrice(${a.id})">🔄 Refresh</button></td><td><input type="number" id="min-${a.id}" value="${a.min_price}" step="1"></td><td><input type="number" id="max-${a.id}" value="${a.max_price}" step="1"></td><td><button class="btn-approve" onclick="window.updateAssetFull(${a.id})">💾 Save</button></td></tr>`).join('')}</tbody></table></div>`;
+        container.innerHTML = `
+            <div class="data-table"><h2>Assets <button class="export-excel-btn" id="exportAssetsExcel">Excel</button> <button class="btn-approve" id="manualRefreshAssets" style="margin-left:10px;"><i class="fas fa-sync-alt"></i> Refresh Now</button></h2>
+            <table><thead><tr><th>ID</th><th>Name</th><th>Symbol</th><th>Price</th><th>Min</th><th>Max</th><th>Actions</th></tr></thead>
+            <tbody>${currentAssetsData.map(a => `<tr>
+                <td>${a.id}</td>
+                <td><input type="text" id="name-${a.id}" value="${a.name}" style="width:100px;"></td>
+                <td><input type="text" id="sym-${a.id}" value="${a.symbol}" style="width:80px;"></td>
+                <td>₹<span id="live-price-${a.id}">${a.price.toFixed(2)}</span> <button class="btn-approve" onclick="window.updateSingleAssetPrice(${a.id})">🔄 Update</button></td>
+                <td><input type="number" id="min-${a.id}" value="${a.min_price}" step="1"></td>
+                <td><input type="number" id="max-${a.id}" value="${a.max_price}" step="1"></td>
+                <td><button class="btn-approve" onclick="window.updateAssetFull(${a.id})">💾 Save</button></td>
+            </tr>`).join('')}</tbody>
+            </table></div>
+        `;
         document.getElementById('exportAssetsExcel')?.addEventListener('click', () => exportToExcel('assets', currentAssetsData));
-        window.updateAssetPrice = async (id) => { 
+        document.getElementById('manualRefreshAssets')?.addEventListener('click', async () => { await refreshAssetPricesOnly(); showToast('Prices refreshed'); });
+        startAssetAutoRefresh();
+        window.updateSingleAssetPrice = async (id) => {
             const newPrice = (Math.random() * 500 + 50).toFixed(2);
             document.getElementById(`live-price-${id}`).innerText = newPrice;
             await fetchWithAuth(`${API_URL}/admin/assets/${id}`, { method: 'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ price: parseFloat(newPrice) }) });
@@ -388,19 +456,53 @@ async function loadAssets(container, silent) {
     } catch(err) { if(!silent) container.innerHTML = '<div class="error-msg">Error</div>'; }
 }
 
+// ========== SETTINGS (time windows + dark mode toggle) ==========
 async function loadSettings(container, silent) {
     try {
         const res = await fetchWithAuth(`${API_URL}/admin/settings`);
         const settings = (await res.json()).settings || {};
-        container.innerHTML = `<div class="data-table"><h2>System Config</h2><div class="setting-item"><label>Deposits Enabled:</label><select id="deposit-enabled"><option value="true" ${settings.deposit_enabled===true?'selected':''}>Yes</option><option value="false" ${settings.deposit_enabled===false?'selected':''}>No</option></select></div><div class="setting-item"><label>Withdrawals Enabled:</label><select id="withdraw-enabled"><option value="true" ${settings.withdraw_enabled===true?'selected':''}>Yes</option><option value="false" ${settings.withdraw_enabled===false?'selected':''}>No</option></select></div><div class="setting-item"><label>Profit %:</label><input id="profit-percent" value="${settings.profit_percentage||80}" type="number"></div><button id="save-settings" class="btn-save">Save Settings</button></div>`;
+        container.innerHTML = `
+            <div class="data-table"><h2>System Configuration <button id="darkModeToggle" class="btn-approve" style="float:right;"><i class="fas fa-moon"></i> ${darkMode ? 'Light Mode' : 'Dark Mode'}</button></h2>
+            <div class="setting-item"><label>🏦 Deposits Enabled:</label><select id="deposit-enabled"><option value="true" ${settings.deposit_enabled===true?'selected':''}>Yes</option><option value="false" ${settings.deposit_enabled===false?'selected':''}>No</option></select></div>
+            <div class="setting-item"><label>⏰ Deposit Time Window:</label><input type="time" id="deposit-start" value="${settings.deposit_start_time||'00:00'}"> to <input type="time" id="deposit-end" value="${settings.deposit_end_time||'23:59'}"></div>
+            <div class="setting-item"><label>💸 Withdrawals Enabled:</label><select id="withdraw-enabled"><option value="true" ${settings.withdraw_enabled===true?'selected':''}>Yes</option><option value="false" ${settings.withdraw_enabled===false?'selected':''}>No</option></select></div>
+            <div class="setting-item"><label>⏰ Withdrawal Time Window:</label><input type="time" id="withdraw-start" value="${settings.withdraw_start_time||'00:00'}"> to <input type="time" id="withdraw-end" value="${settings.withdraw_end_time||'23:59'}"></div>
+            <div class="setting-item"><label>📈 Profit Percentage (%):</label><input type="number" id="profit-percent" value="${settings.profit_percentage||80}" min="10" max="200"></div>
+            <button id="save-settings" class="btn-save">💾 Save All Settings</button>
+            </div>
+        `;
+        document.getElementById('darkModeToggle').onclick = () => {
+            darkMode = !darkMode;
+            applyDarkMode();
+            loadSettings(container, silent); // refresh to update button text
+        };
         document.getElementById('save-settings').onclick = async () => {
-            await fetchWithAuth(`${API_URL}/admin/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deposit_enabled: document.getElementById('deposit-enabled').value === 'true', withdraw_enabled: document.getElementById('withdraw-enabled').value === 'true', profit_percentage: parseInt(document.getElementById('profit-percent').value) }) });
-            showToast('Settings saved');
+            const depositEnabled = document.getElementById('deposit-enabled').value === 'true';
+            const withdrawEnabled = document.getElementById('withdraw-enabled').value === 'true';
+            const profitPercentage = parseInt(document.getElementById('profit-percent').value);
+            const depositStart = document.getElementById('deposit-start').value;
+            const depositEnd = document.getElementById('deposit-end').value;
+            const withdrawStart = document.getElementById('withdraw-start').value;
+            const withdrawEnd = document.getElementById('withdraw-end').value;
+            await fetchWithAuth(`${API_URL}/admin/settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    deposit_enabled: depositEnabled,
+                    withdraw_enabled: withdrawEnabled,
+                    profit_percentage: profitPercentage,
+                    deposit_start_time: depositStart,
+                    deposit_end_time: depositEnd,
+                    withdraw_start_time: withdrawStart,
+                    withdraw_end_time: withdrawEnd
+                })
+            });
+            showToast('Settings saved successfully!');
         };
     } catch(err) { if(!silent) container.innerHTML = '<div class="error-msg">Error loading settings</div>'; }
 }
 
-// ========== EXCEL EXPORT (SheetJS) ==========
+// ========== EXCEL EXPORT ==========
 function exportToExcel(type, data) {
     if(!data || data.length === 0) { showToast('No data to export', 'error'); return; }
     let sheetData = [];
@@ -416,7 +518,7 @@ function exportToExcel(type, data) {
     showToast(`Excel downloaded (${data.length} records)`);
 }
 
-// Start
+// Start application
 if (adminToken) {
     initAdminPanel().catch(() => showLoginForm('Session expired. Please login again.'));
 } else {
