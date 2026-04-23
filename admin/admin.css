@@ -532,3 +532,100 @@ canvas { max-height: 280px; width: 100%; }
   transition: 0.2s;
 }
 .login-card button:hover { background: #2e7d32; transform: scale(1.02); }
+
+/* ----- DARK MODE STYLES (ADDED) ----- */
+body.dark-mode {
+  background: #121212;
+  color: #e0e0e0;
+}
+body.dark-mode .sidebar {
+  background: rgba(30, 30, 40, 0.95);
+  border-right-color: #2c2c3a;
+}
+body.dark-mode .main-content {
+  background: #121212;
+}
+body.dark-mode .stat-card,
+body.dark-mode .data-table,
+body.dark-mode .chart-container,
+body.dark-mode .setting-item,
+body.dark-mode .top-bar {
+  background: #1e1e2a;
+  border-color: #2c2c3a;
+  color: #ddd;
+}
+body.dark-mode .stat-card .stat-number {
+  background: linear-gradient(135deg, #ffffff, #4CAF50);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+body.dark-mode .data-table th {
+  color: #81c784;
+}
+body.dark-mode .data-table td {
+  color: #ccc;
+}
+body.dark-mode .nav-link {
+  color: #bbb;
+}
+body.dark-mode .nav-link.active {
+  background: #2a2a36;
+  color: #81c784;
+}
+body.dark-mode .login-card {
+  background: rgba(30,30,40,0.9);
+  color: white;
+}
+body.dark-mode .login-card input {
+  background: #2c2c3a;
+  border-color: #444;
+  color: white;
+}
+body.dark-mode .btn-approve {
+  background: #2e7d32;
+  color: white;
+}
+body.dark-mode .btn-reject {
+  background: #b71c1c;
+  color: white;
+}
+body.dark-mode .modal-content {
+  background: #1e1e2a;
+  color: white;
+}
+body.dark-mode .edit-user-input {
+  background: #2c2c3a;
+  color: white;
+}
+body.dark-mode .search-filter {
+  background: #1e1e2a;
+}
+body.dark-mode .search-filter input {
+  background: #2c2c3a;
+  border-color: #444;
+  color: white;
+}
+body.dark-mode .pagination button {
+  background: #2c2c3a;
+  color: white;
+  border-color: #444;
+}
+body.dark-mode .pagination button.active-page {
+  background: #4CAF50;
+}
+body.dark-mode .export-excel-btn {
+  background: #2e7d32;
+  color: white;
+  border-color: #4CAF50;
+}
+body.dark-mode .export-excel-btn:hover {
+  background: #4CAF50;
+}
+body.dark-mode .logout-btn {
+  background: #3e1a1a;
+  color: #ff8a5c;
+}
+body.dark-mode .sidebar-toggle {
+  background: #2c2c3a;
+  color: white;
+}
